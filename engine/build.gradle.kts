@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("jvm") version "2.2.21"
+    id("org.jetbrains.kotlin.jvm")
 }
 
 // 안드로이드 앱 모듈과 맞추기 위해 JVM 17로 빌드
