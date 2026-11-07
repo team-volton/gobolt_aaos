@@ -68,6 +68,16 @@ class TravelScenarioTest {
     }
 
     @Test
+    fun `차박으로 충전 못 하는 밤이 있으면 그 전날 밤에 미리 충전한다`() {
+        val schedule = Scenarios.travel(carCampThirdNight = true)
+        for (strategy in Strategy.entries) {
+            val plan = planner.plan(schedule, strategy)
+            assertTrue(plan.isFeasible, "$strategy")
+            assertTrue(plan.stops.any { !it.fast && it.dayIndex <= 1 }, "$strategy")
+        }
+    }
+
+    @Test
     fun `칠곡을 못 쓰면 김천으로 바뀌고 첫날 밤 충전이 추가된다`() {
         val plan = planner.plan(Scenarios.travel(), unavailableChargerIds = setOf(Scenarios.chilgok.id))
         assertTrue(plan.isFeasible)
