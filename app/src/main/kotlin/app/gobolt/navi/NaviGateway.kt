@@ -36,7 +36,7 @@ class NaviGateway(context: Context) {
 
         override fun onRouteStarted(routeStartInfo: RouteStartInfo) {
             val km = routeStartInfo.distance / 1000
-            log("경로 시작: ${km}km, 도착 잔량 ${routeStartInfo.remainDestinationChargingValue}%")
+            log("경로 시작: ${km}km, 도착 잔량 원값 ${routeStartInfo.remainDestinationChargingValue}")
             // 내비가 경유지를 더 넣었는지 확인 / Check whether the navi added waypoints
             navi.getWaypointInfo()
         }
