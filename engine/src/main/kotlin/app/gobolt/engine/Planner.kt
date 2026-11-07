@@ -20,8 +20,8 @@ class Planner(
             soc = outcome.soc
             outcome.failure?.let { return ledger.toPlan(strategy, schedule.startSocPct, it) }
 
-            val next = schedule.days.getOrNull(index + 1) ?: continue
-            soc = chargeOvernight(index, day, next, soc, strategy, unavailableChargerIds, ledger)
+            if (index == schedule.days.lastIndex) continue
+            soc = chargeOvernight(schedule.days, index, soc, strategy, unavailableChargerIds, ledger)
         }
         return ledger.toPlan(strategy, schedule.startSocPct, null)
     }
@@ -89,21 +89,29 @@ class Planner(
     )
 
     private fun chargeOvernight(
+        days: List<Day>,
         dayIndex: Int,
-        day: Day,
-        next: Day,
         startSoc: Double,
         strategy: Strategy,
         unavailable: Set<String>,
         ledger: Ledger,
     ): Double {
-        fun needsCharge(soc: Double) =
-            runDay(dayIndex + 1, next, soc, strategy, unavailable).failure != null
+        // 다음 충전 기회가 있는 밤까지 버티는지 확인 / Check we last until the next night with charging
+        fun needsCharge(soc: Double): Boolean {
+            var left = soc
+            for (index in dayIndex + 1..days.lastIndex) {
+                val outcome = runDay(index, days[index], left, strategy, unavailable)
+                if (outcome.failure != null) return true
+                if (days[index].night.site.canCharge) return false
+                left = outcome.soc
+            }
+            return false
+        }
 
         var soc = startSoc
         if (!needsCharge(soc)) return soc
 
-        val site = day.night.site
+        val site = days[dayIndex].night.site
         site.slow?.let { place ->
             if (soc < place.targetPct) soc = ledger.chargeSlow(dayIndex, place, soc)
         }

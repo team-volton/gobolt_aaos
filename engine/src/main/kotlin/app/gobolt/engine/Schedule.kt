@@ -23,7 +23,9 @@ data class ChargingPlace(
 data class ChargingSite(
     val slow: ChargingPlace? = null,
     val morningFast: ChargingPlace? = null,
-)
+) {
+    val canCharge: Boolean get() = slow != null || morningFast != null
+}
 
 sealed interface Activity {
     val label: String
