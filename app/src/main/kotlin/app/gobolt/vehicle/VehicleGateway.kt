@@ -1,7 +1,9 @@
 package app.gobolt.vehicle
 
 import ai.pleos.playground.vehicle.Vehicle
+import ai.pleos.playground.vehicle.constant.control.VehicleGear
 import ai.pleos.playground.vehicle.listener.EvBatteryStateOfChargeListener
+import ai.pleos.playground.vehicle.listener.GearSelectionListener
 import android.content.Context
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
@@ -17,17 +19,29 @@ data class VehicleState(
     val socPct: Int? = null,
     val odometerKm: Float? = null,
     val error: String? = null,
+    val capacityKwh: Float? = null,
+    val driving: Boolean = false,
 )
 
 class VehicleGateway(context: Context) {
     private val vehicle = Vehicle(context.applicationContext)
     private val battery = vehicle.getEvBattery()
     private val odometer = vehicle.getOdometer()
+    private val gear = vehicle.getGear()
 
     private val _state = MutableStateFlow(VehicleState())
     val state: StateFlow<VehicleState> = _state.asStateFlow()
 
     private var registered = false
+    private var gearRegistered = false
+
+    private val gearListener = object : GearSelectionListener {
+        override fun onSelected(value: VehicleGear?) {
+            value?.let(::applyGear)
+        }
+
+        override fun onFailed(e: Exception) = Unit
+    }
 
     private val socListener = object : EvBatteryStateOfChargeListener {
         override fun onEvBatteryStateOfChargeUpdated(value: Int?) {
@@ -54,17 +68,37 @@ class VehicleGateway(context: Context) {
                     _state.update { it.copy(error = failure.message ?: failure.javaClass.simpleName) }
                 }
             readOdometer().onSuccess { value -> _state.update { it.copy(odometerKm = value) } }
+            readCapacity().onSuccess { value -> _state.update { it.copy(capacityKwh = value) } }
+            readGear().onSuccess { value ->
+                value?.let(::applyGear)
+                gear.registerGearSelection(gearListener)
+                gearRegistered = true
+            }
         }
     }
 
     fun stop() {
         if (registered) battery.unregisterEvBatteryStateOfCharge(socListener)
         registered = false
+        if (gearRegistered) gear.unregisterGearSelection(gearListener)
+        gearRegistered = false
         vehicle.release()
     }
 
     private suspend fun readSoc(): Result<Int?> = awaitResult { done, failed ->
         battery.getEvBatteryStateOfCharge(done, failed)
+    }
+
+    private fun applyGear(value: VehicleGear) {
+        _state.update { it.copy(driving = value != VehicleGear.GEAR_PARK && value != VehicleGear.GEAR_UNKNOWN) }
+    }
+
+    private suspend fun readCapacity(): Result<Float?> = awaitResult { done, failed ->
+        battery.getEvBatteryCapacity(done, failed)
+    }
+
+    private suspend fun readGear(): Result<VehicleGear?> = awaitResult { done, failed ->
+        gear.getCurrentGearSelectionState(done, failed)
     }
 
     private suspend fun readOdometer(): Result<Float?> = awaitResult { done, failed ->
