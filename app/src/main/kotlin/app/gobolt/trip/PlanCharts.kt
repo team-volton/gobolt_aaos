@@ -24,14 +24,12 @@ import app.gobolt.ui.GoboltTheme
 import app.gobolt.ui.secondaryText
 import kotlin.math.roundToInt
 
-private const val FLOOR_PCT = 20f
-
 // 거리가 없는 이벤트의 그래프 폭(km 환산) / Chart width, in km, for events without distance
 private const val FAST_CHARGE_WIDTH = 30.0
 private const val OTHER_EVENT_WIDTH = 50.0
 
 @Composable
-fun SocChart(plan: Plan, modifier: Modifier = Modifier) {
+fun SocChart(plan: Plan, floorPct: Double, modifier: Modifier = Modifier) {
     val energy = GoboltTheme.energy
     val muted = secondaryText()
     val grid = energy.track
@@ -96,15 +94,15 @@ fun SocChart(plan: Plan, modifier: Modifier = Modifier) {
 
         drawLine(
             energy.warning,
-            Offset(left, yOf(FLOOR_PCT.toDouble())),
-            Offset(right, yOf(FLOOR_PCT.toDouble())),
+            Offset(left, yOf(floorPct)),
+            Offset(right, yOf(floorPct)),
             strokeWidth = 3f,
             pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f)),
         )
-        val floorText = measurer.measure("▲ 하한 20%", warning)
+        val floorText = measurer.measure("▲ 하한 ${floorPct.roundToInt()}%", warning)
         drawText(
             floorText,
-            topLeft = Offset(right - floorText.size.width, yOf(FLOOR_PCT.toDouble()) + 4f),
+            topLeft = Offset(right - floorText.size.width, yOf(floorPct) + 4f),
         )
     }
 }

@@ -54,6 +54,7 @@ import app.gobolt.ui.IconTap
 import app.gobolt.ui.Metric
 import app.gobolt.ui.PrimaryButton
 import app.gobolt.ui.ScreenHeader
+import app.gobolt.ui.SecondaryButton
 import app.gobolt.ui.pct
 import app.gobolt.ui.rounded
 import app.gobolt.ui.secondaryText
@@ -77,6 +78,7 @@ fun PlanScreen(
     val baseline by viewModel.lodgingPlans.collectAsStateWithLifecycle()
     val strategy by viewModel.strategy.collectAsStateWithLifecycle()
     val input by viewModel.tripInput.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
     val plan = plans.firstOrNull { it.strategy == strategy } ?: return
     val before = baseline.firstOrNull { it.strategy == strategy }
     var openStop by remember { mutableStateOf<ChargeStop?>(null) }
@@ -136,11 +138,19 @@ fun PlanScreen(
                     }
                 }
                 GoCard(Modifier.fillMaxWidth().weight(1f)) {
-                    SocChart(plan, Modifier.fillMaxSize())
+                    SocChart(plan, settings.floorPct.toDouble(), Modifier.fillMaxSize())
                 }
             }
             openStop?.let { stop ->
-                StopSheet(stop, viewModel.alternatives(plan, stop)) { openStop = null }
+                StopSheet(
+                    stop = stop,
+                    alternatives = viewModel.alternatives(plan, stop),
+                    onExclude = {
+                        stop.chargerId?.let(viewModel::toggleCharger)
+                        openStop = null
+                    },
+                    onClose = { openStop = null },
+                )
             }
         }
     }
@@ -239,7 +249,12 @@ private fun StopCard(stop: ChargeStop, modifier: Modifier = Modifier, onClick: (
 }
 
 @Composable
-private fun StopSheet(stop: ChargeStop, alternatives: List<ChargerOption>, onClose: () -> Unit) {
+private fun StopSheet(
+    stop: ChargeStop,
+    alternatives: List<ChargerOption>,
+    onExclude: () -> Unit,
+    onClose: () -> Unit,
+) {
     Box(
         contentAlignment = Alignment.BottomCenter,
         modifier = Modifier
@@ -269,6 +284,7 @@ private fun StopSheet(stop: ChargeStop, alternatives: List<ChargerOption>, onClo
                     Spacer(Modifier.height(8.dp))
                     Text("못 쓸 때 대체 충전소", style = MaterialTheme.typography.titleLarge, color = secondaryText())
                     alternatives.forEach { AlternativeRow(it) }
+                    SecondaryButton("이 충전소 빼고 다시 계획", onExclude, Modifier.fillMaxWidth())
                 }
             }
         }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,7 +40,7 @@ private val RemainingKmStyle = TextStyle(fontSize = 200.sp, lineHeight = 208.sp,
 
 private data class NextLeg(val name: String, val km: Double, val arrivalPct: Double)
 
-private fun nextLeg(plan: Plan): NextLeg? {
+private fun plannedLeg(plan: Plan): NextLeg? {
     val chargeIndex = plan.events.indexOfFirst { it.kind == EventKind.FAST_CHARGE }
     val drive = if (chargeIndex > 0) {
         plan.events.subList(0, chargeIndex).lastOrNull { it.kind == EventKind.DRIVE }
@@ -51,17 +52,29 @@ private fun nextLeg(plan: Plan): NextLeg? {
 
 @Composable
 fun DrivingScreen(viewModel: GoboltViewModel, onFinish: () -> Unit, modifier: Modifier = Modifier) {
-    val plans by viewModel.plans.collectAsStateWithLifecycle()
-    val strategy by viewModel.strategy.collectAsStateWithLifecycle()
-    val plan = plans.firstOrNull { it.strategy == strategy } ?: return
-    val leg = nextLeg(plan) ?: return
+    val selected by viewModel.selectedPlan.collectAsStateWithLifecycle()
+    val navi by viewModel.naviState.collectAsStateWithLifecycle()
+    val vehicle by viewModel.vehicleState.collectAsStateWithLifecycle()
+    val plan = selected ?: return
+    val planned = plannedLeg(plan) ?: return
+    val live = navi.nextStop
+    val leg = NextLeg(
+        name = live?.name ?: planned.name,
+        km = live?.remainKm ?: planned.km,
+        arrivalPct = live?.let(viewModel::arrivalPct) ?: planned.arrivalPct,
+    )
+    val check = live?.let { viewModel.driveCheck(it, planned.arrivalPct) }
 
     Row(horizontalArrangement = Arrangement.spacedBy(CardGap), modifier = modifier) {
         GoCard(Modifier.weight(0.62f).fillMaxHeight()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.Bolt, null, Modifier.size(48.dp), tint = GoboltTheme.energy.charge)
                 Spacer(Modifier.size(8.dp))
-                Text("다음 충전", style = MaterialTheme.typography.headlineMedium, color = secondaryText())
+                Text(
+                    if (live == null) "다음 충전 · 계획값" else "다음 지점",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = secondaryText(),
+                )
             }
             Text(leg.name, style = MaterialTheme.typography.headlineLarge)
             Spacer(Modifier.weight(1f))
@@ -75,12 +88,27 @@ fun DrivingScreen(viewModel: GoboltViewModel, onFinish: () -> Unit, modifier: Mo
             }
             Text("남은 거리", style = MaterialTheme.typography.headlineMedium, color = secondaryText())
             Spacer(Modifier.weight(1f))
-            Metric(pct(leg.arrivalPct), "도착 예상 잔량")
+            Row(horizontalArrangement = Arrangement.spacedBy(64.dp)) {
+                Metric(pct(leg.arrivalPct), "도착 예상 잔량")
+                live?.let { Metric("${it.remainMinutes.rounded()}분", "남은 시간") }
+            }
         }
         Column(
             verticalArrangement = Arrangement.spacedBy(CardGap),
             modifier = Modifier.weight(0.38f).fillMaxHeight(),
         ) {
+            if (check?.shouldAlert == true) {
+                GoCard(Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Warning, null, Modifier.size(40.dp), tint = GoboltTheme.energy.warning)
+                        Spacer(Modifier.size(12.dp))
+                        Text(
+                            if (check.canReach) "계획보다 잔량이 적어요" else "다음 지점까지 빠듯해요",
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    }
+                }
+            }
             GoCard(Modifier.fillMaxWidth().weight(1f)) {
                 Text("충전 계획", style = MaterialTheme.typography.headlineMedium)
                 plan.stops.forEach { stop ->
@@ -94,12 +122,26 @@ fun DrivingScreen(viewModel: GoboltViewModel, onFinish: () -> Unit, modifier: Mo
                     }
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.Lock, null, Modifier.size(36.dp), tint = secondaryText())
-                Spacer(Modifier.size(12.dp))
-                Text("주행 중 입력 잠금", style = MaterialTheme.typography.bodyLarge, color = secondaryText())
+            if (vehicle.driving) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Lock, null, Modifier.size(36.dp), tint = secondaryText())
+                    Spacer(Modifier.size(12.dp))
+                    Text("주행 중 입력 잠금", style = MaterialTheme.typography.bodyLarge, color = secondaryText())
+                }
             }
             SecondaryButton("운행 종료", onFinish, Modifier.fillMaxWidth())
         }
+    }
+}
+
+@Composable
+fun DriveLock(onBack: () -> Unit, modifier: Modifier = Modifier) {
+    Column(verticalArrangement = Arrangement.spacedBy(CardGap), modifier = modifier) {
+        GoCard(Modifier.fillMaxWidth()) {
+            Icon(Icons.Rounded.Lock, null, Modifier.size(56.dp), tint = secondaryText())
+            Text("주행 중에는 입력할 수 없어요", style = MaterialTheme.typography.headlineLarge)
+            Text("정차한 뒤 다시 열어 주세요", style = MaterialTheme.typography.titleLarge, color = secondaryText())
+        }
+        SecondaryButton("돌아가기", onBack, Modifier.fillMaxWidth())
     }
 }

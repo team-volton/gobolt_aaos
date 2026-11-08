@@ -43,6 +43,7 @@ fun TripInputScreen(
 ) {
     val input by viewModel.tripInput.collectAsStateWithLifecycle()
     val plans by viewModel.plans.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
     val kwh = plans.firstOrNull()?.summary?.totalKwh
 
     Column(verticalArrangement = Arrangement.spacedBy(CardGap), modifier = modifier) {
@@ -79,8 +80,8 @@ fun TripInputScreen(
                 GoCard(Modifier.fillMaxWidth()) {
                     Text("기본값", style = MaterialTheme.typography.titleLarge, color = secondaryText())
                     Setting("출발 시각", "08:40")
-                    Setting("안전 하한", "20%")
-                    Setting("충전 목표", "80%")
+                    Setting("안전 하한", "${settings.floorPct}%")
+                    Setting("충전 목표", "${settings.targetPct}%")
                 }
                 Spacer(Modifier.weight(1f))
                 PrimaryButton("계획 만들기", onMakePlan, Modifier.fillMaxWidth())

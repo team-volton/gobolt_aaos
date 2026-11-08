@@ -34,7 +34,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.gobolt.GoboltViewModel
-import app.gobolt.demo.DemoTrip
 import app.gobolt.engine.EventKind
 import app.gobolt.engine.Plan
 import app.gobolt.ui.CardGap
@@ -51,8 +50,6 @@ import app.gobolt.ui.secondaryText
 
 enum class DriveMode { Daily, Travel }
 
-private const val FLOOR_PCT = 20.0
-
 @Composable
 fun HomeScreen(
     viewModel: GoboltViewModel,
@@ -66,6 +63,8 @@ fun HomeScreen(
     val vehicle by viewModel.vehicleState.collectAsStateWithLifecycle()
     val week by viewModel.weekPlan.collectAsStateWithLifecycle()
     val plans by viewModel.plans.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val floor = settings.floorPct.toDouble()
 
     Column(verticalArrangement = Arrangement.spacedBy(CardGap), modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -84,7 +83,7 @@ fun HomeScreen(
                         vehicle.socPct?.let { "$it%" } ?: "--",
                         style = MaterialTheme.typography.displayLarge,
                     )
-                    SocBar((vehicle.socPct ?: 0).toDouble(), FLOOR_PCT)
+                    SocBar((vehicle.socPct ?: 0).toDouble(), floor)
                     Spacer(Modifier.height(8.dp))
                     Text(
                         vehicle.socPct?.let { "주행 가능 약 ${viewModel.rangeKm(it).rounded()}km" } ?: "잔량 확인 중",
@@ -116,7 +115,7 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 when (mode) {
-                    DriveMode.Daily -> DailyContent(week, Modifier.weight(1f))
+                    DriveMode.Daily -> DailyContent(week, viewModel.weekLabels, floor, Modifier.weight(1f))
                     DriveMode.Travel -> TravelContent(plans, onOpenTrip, onNewTrip, Modifier.weight(1f))
                 }
             }
@@ -159,9 +158,9 @@ private fun Favorite(icon: ImageVector, label: String, onClick: () -> Unit) {
 
 private data class WeekDay(val label: String, val km: Double, val homeSoc: Double, val charges: Boolean)
 
-private fun weekDays(plan: Plan): List<WeekDay> {
+private fun weekDays(plan: Plan, labels: List<String>): List<WeekDay> {
     var soc = plan.events.firstOrNull()?.fromPct ?: 0.0
-    return DemoTrip.weekdays.mapIndexed { index, label ->
+    return labels.mapIndexed { index, label ->
         val events = plan.events.filter { it.dayIndex == index }
         val use = events.filter { it.kind != EventKind.SLOW_CHARGE && it.kind != EventKind.FAST_CHARGE }
         val home = use.lastOrNull()?.toPct ?: soc
@@ -171,15 +170,15 @@ private fun weekDays(plan: Plan): List<WeekDay> {
 }
 
 @Composable
-private fun DailyContent(plan: Plan?, modifier: Modifier = Modifier) {
+private fun DailyContent(plan: Plan?, labels: List<String>, floor: Double, modifier: Modifier = Modifier) {
     if (plan == null) return
-    val days = weekDays(plan)
+    val days = weekDays(plan, labels)
     val today = days.first()
     val nextCharge = days.firstOrNull { it.charges }
 
     Column(verticalArrangement = Arrangement.spacedBy(CardGap), modifier = modifier) {
         GoCard(Modifier.fillMaxWidth().weight(1f)) {
-            Text("오늘 (월)", style = MaterialTheme.typography.titleLarge, color = secondaryText())
+            Text("오늘 (${today.label})", style = MaterialTheme.typography.titleLarge, color = secondaryText())
             Text(pct(today.homeSoc), style = MaterialTheme.typography.displayMedium)
             Text("귀가 예상 잔량 · 오늘 ${today.km.rounded()}km", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.weight(1f))
@@ -187,7 +186,7 @@ private fun DailyContent(plan: Plan?, modifier: Modifier = Modifier) {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             days.forEachIndexed { index, day ->
-                DayCell(day, today = index == 0, modifier = Modifier.weight(1f))
+                DayCell(day, today = index == 0, floor = floor, modifier = Modifier.weight(1f))
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(48.dp)) {
@@ -215,12 +214,12 @@ private fun ChargeBanner(day: WeekDay?) {
 }
 
 @Composable
-private fun DayCell(day: WeekDay, today: Boolean, modifier: Modifier = Modifier) {
+private fun DayCell(day: WeekDay, today: Boolean, floor: Double, modifier: Modifier = Modifier) {
     GoCard(modifier = modifier, selected = today) {
         Text(day.label, style = MaterialTheme.typography.titleLarge)
         Text("${day.km.rounded()}km", style = MaterialTheme.typography.bodyMedium, color = secondaryText())
         Text(pct(day.homeSoc), style = MaterialTheme.typography.titleLarge, maxLines = 1)
-        SocBar(day.homeSoc, FLOOR_PCT)
+        SocBar(day.homeSoc, floor)
         Box(Modifier.height(40.dp)) {
             if (day.charges) {
                 Icon(Icons.Rounded.Bolt, "충전 필요", Modifier.size(40.dp), tint = GoboltTheme.energy.charge)

@@ -13,9 +13,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.gobolt.home.DriveMode
 import app.gobolt.home.HomeScreen
 import app.gobolt.settings.SettingsScreen
+import app.gobolt.trip.DriveLock
 import app.gobolt.trip.DrivingScreen
 import app.gobolt.trip.PlanScreen
 import app.gobolt.trip.ReportScreen
@@ -23,6 +25,9 @@ import app.gobolt.trip.TripInputScreen
 import app.gobolt.ui.ScreenPadding
 
 private enum class Screen { Home, TripInput, Plan, Driving, Report, Settings }
+
+// 주행 중 입력을 막는 화면 / Screens that take input and lock while driving
+private val INPUT_SCREENS = setOf(Screen.TripInput, Screen.Settings)
 
 @Composable
 fun GoboltApp(viewModel: GoboltViewModel) {
@@ -49,7 +54,11 @@ fun GoboltApp(viewModel: GoboltViewModel) {
             .fillMaxSize()
             .safeDrawingPadding()
             .padding(ScreenPadding)
-        when (stack.last()) {
+        val vehicle by viewModel.vehicleState.collectAsStateWithLifecycle()
+        val locked = vehicle.driving && stack.last() in INPUT_SCREENS
+        if (locked) {
+            DriveLock(onBack = ::back, modifier = content)
+        } else when (stack.last()) {
             Screen.Home -> HomeScreen(
                 viewModel = viewModel,
                 mode = mode,
@@ -74,6 +83,7 @@ fun GoboltApp(viewModel: GoboltViewModel) {
             Screen.Driving -> DrivingScreen(
                 viewModel = viewModel,
                 onFinish = {
+                    viewModel.finishDrive()
                     back()
                     open(Screen.Report)
                 },

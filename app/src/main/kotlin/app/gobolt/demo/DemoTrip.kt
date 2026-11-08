@@ -1,5 +1,7 @@
 package app.gobolt.demo
 
+import app.gobolt.data.AppSettings
+import app.gobolt.data.HomeCharge
 import app.gobolt.engine.Activity
 import app.gobolt.engine.Charger
 import app.gobolt.engine.ChargingPlace
@@ -81,22 +83,21 @@ object DemoTrip {
 
     val weekdays = listOf("월", "화", "수", "목", "금", "토", "일")
 
-    // 월요일을 오늘로 둔 시연 일정 / Demo week that treats Monday as today
-    fun week(startSocPct: Double): Schedule {
-        val commute = Activity.Local("출퇴근", km = 40.0)
-        val night = Night.Lodging(ChargingSite(slow = ChargingPlace("공용 완속", 7.0, targetPct = 80.0)))
-        val activities = listOf(
-            listOf(commute),
-            listOf(commute),
-            listOf(commute),
-            listOf(commute, Activity.Local("저녁 약속", km = 30.0)),
-            listOf(commute),
-            emptyList(),
-            emptyList(),
-        )
+    fun weekdaysFrom(todayIndex: Int): List<String> = List(7) { weekdays[(todayIndex + it) % 7] }
+
+    // 오늘부터 7일 / Seven days starting today
+    fun week(startSocPct: Double, todayIndex: Int, settings: AppSettings): Schedule {
+        val commute = Activity.Local("출퇴근", km = settings.commuteKm.toDouble())
+        val site = when (settings.homeCharge) {
+            HomeCharge.NONE -> ChargingSite()
+            else -> ChargingSite(slow = ChargingPlace(settings.homeCharge.label, 7.0, targetPct = settings.targetPct.toDouble()))
+        }
         return Schedule(
             startSocPct = startSocPct,
-            days = weekdays.zip(activities) { day, list -> Day(day, list, night) },
+            days = List(7) { offset ->
+                val weekday = (todayIndex + offset) % 7
+                Day(weekdays[weekday], if (weekday in settings.commuteDays) listOf(commute) else emptyList(), Night.Lodging(site))
+            },
         )
     }
 }
