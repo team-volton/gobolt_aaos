@@ -12,7 +12,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.gobolt.GoboltViewModel
 import app.gobolt.data.DriveRecord
@@ -20,6 +19,7 @@ import app.gobolt.data.label
 import app.gobolt.ui.CardGap
 import app.gobolt.ui.GoCard
 import app.gobolt.ui.PrimaryButton
+import app.gobolt.ui.Spacing
 import app.gobolt.ui.pct
 import app.gobolt.ui.rounded
 import app.gobolt.ui.secondaryText
@@ -78,7 +78,7 @@ fun ReportScreen(viewModel: GoboltViewModel, onDone: () -> Unit, modifier: Modif
 @Composable
 private fun HistoryRow(record: DriveRecord) {
     val date = if (record.epochDay > 0) LocalDate.ofEpochDay(record.epochDay).label() else ""
-    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+    Row(Modifier.fillMaxWidth().padding(vertical = Spacing.xs)) {
         Text("$date ${record.name}", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
         Text(
             "${record.km.rounded()}km · ${record.usedKwh.rounded()}kWh · 도착 ${pct(record.endSocPct)}",
@@ -100,7 +100,7 @@ private fun Tile(value: String, label: String, modifier: Modifier = Modifier) {
 private fun CompareRow(label: String, planned: String, actual: String, header: Boolean = false) {
     val style = if (header) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleLarge
     val color = if (header) secondaryText() else MaterialTheme.colorScheme.onSurface
-    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+    Row(Modifier.fillMaxWidth().padding(vertical = Spacing.xs)) {
         Text(label, style = style, modifier = Modifier.weight(1f))
         Text(planned, style = style, color = color, modifier = Modifier.weight(1f))
         Text(actual, style = style, color = color, modifier = Modifier.weight(1f))

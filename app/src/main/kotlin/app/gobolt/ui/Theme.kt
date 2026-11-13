@@ -15,30 +15,30 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-private val Ink = Color(0xFF0F1714)
-
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF00C27A),
-    onPrimary = Ink,
-    background = Color(0xFFF4F6F5),
-    onBackground = Ink,
+    primary = Color(0xFF0E8A5F),
+    onPrimary = Color(0xFFFFFFFF),
+    background = Color(0xFFF2F4F5),
+    onBackground = Color(0xFF14181B),
     surface = Color(0xFFFFFFFF),
-    onSurface = Ink,
-    onSurfaceVariant = Color(0xFF5B6762),
-    outline = Color(0xFFD5DBD8),
-    error = Color(0xFFC2410C),
+    onSurface = Color(0xFF14181B),
+    surfaceVariant = Color(0xFFE6E9EB),
+    onSurfaceVariant = Color(0xFF5C656C),
+    outline = Color(0xFFD2D7DB),
+    error = Color(0xFFB4501A),
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF3DF5A0),
-    onPrimary = Ink,
-    background = Color(0xFF0B0F0E),
-    onBackground = Color(0xFFF2F5F4),
-    surface = Color(0xFF151B19),
-    onSurface = Color(0xFFF2F5F4),
-    onSurfaceVariant = Color(0xFF9AA6A1),
-    outline = Color(0xFF2C3532),
-    error = Color(0xFFFF8A63),
+    primary = Color(0xFF34B987),
+    onPrimary = Color(0xFF07130E),
+    background = Color(0xFF0D1012),
+    onBackground = Color(0xFFECEFF1),
+    surface = Color(0xFF171B1E),
+    onSurface = Color(0xFFECEFF1),
+    surfaceVariant = Color(0xFF242A2E),
+    onSurfaceVariant = Color(0xFF98A1A8),
+    outline = Color(0xFF323A3F),
+    error = Color(0xFFEE9150),
 )
 
 @Immutable
@@ -51,19 +51,19 @@ data class EnergyColors(
 )
 
 private val LightEnergy = EnergyColors(
-    drive = Color(0xFF2F6BFF),
-    charge = Color(0xFF007A4D),
-    stay = Color(0xFF7A5CFF),
-    warning = Color(0xFFC2410C),
-    track = Color(0xFFE4E9E6),
+    drive = Color(0xFF2D62CF),
+    charge = Color(0xFF0E8A5F),
+    stay = Color(0xFF66707E),
+    warning = Color(0xFFB4501A),
+    track = Color(0xFFE6E9EB),
 )
 
 private val DarkEnergy = EnergyColors(
-    drive = Color(0xFF7FA6FF),
-    charge = Color(0xFF3DF5A0),
-    stay = Color(0xFFAE97FF),
-    warning = Color(0xFFFF8A63),
-    track = Color(0xFF2C3532),
+    drive = Color(0xFF6E98EC),
+    charge = Color(0xFF34B987),
+    stay = Color(0xFF8C96A4),
+    warning = Color(0xFFEE9150),
+    track = Color(0xFF242A2E),
 )
 
 private val LocalEnergyColors = staticCompositionLocalOf { LightEnergy }
@@ -73,16 +73,19 @@ object GoboltTheme {
         @Composable @ReadOnlyComposable get() = LocalEnergyColors.current
 }
 
-// 차량 화면은 160dpi라 1sp가 1px / The car display is 160dpi, so 1sp equals 1px
+// 차량 화면은 160dpi라 1sp가 1px. 크기와 줄 높이 모두 4의 배수
+// The car display is 160dpi (1sp = 1px). Sizes and line heights are multiples of 4
 private val CarTypography = Typography(
-    displayLarge = TextStyle(fontSize = 120.sp, lineHeight = 128.sp, fontWeight = FontWeight.Bold),
-    displayMedium = TextStyle(fontSize = 88.sp, lineHeight = 96.sp, fontWeight = FontWeight.Bold),
-    headlineLarge = TextStyle(fontSize = 44.sp, lineHeight = 60.sp, fontWeight = FontWeight.Bold),
-    headlineMedium = TextStyle(fontSize = 36.sp, lineHeight = 52.sp, fontWeight = FontWeight.Bold),
-    titleLarge = TextStyle(fontSize = 32.sp, lineHeight = 48.sp, fontWeight = FontWeight.SemiBold),
-    bodyLarge = TextStyle(fontSize = 28.sp, lineHeight = 42.sp),
-    bodyMedium = TextStyle(fontSize = 24.sp, lineHeight = 36.sp),
-    labelLarge = TextStyle(fontSize = 28.sp, lineHeight = 42.sp, fontWeight = FontWeight.SemiBold),
+    displayLarge = TextStyle(fontSize = 200.sp, lineHeight = 208.sp, fontWeight = FontWeight.Bold),
+    displayMedium = TextStyle(fontSize = 120.sp, lineHeight = 128.sp, fontWeight = FontWeight.Bold),
+    displaySmall = TextStyle(fontSize = 88.sp, lineHeight = 96.sp, fontWeight = FontWeight.Bold),
+    headlineLarge = TextStyle(fontSize = 44.sp, lineHeight = 56.sp, fontWeight = FontWeight.Bold),
+    headlineMedium = TextStyle(fontSize = 36.sp, lineHeight = 48.sp, fontWeight = FontWeight.SemiBold),
+    titleLarge = TextStyle(fontSize = 32.sp, lineHeight = 44.sp, fontWeight = FontWeight.Medium),
+    bodyLarge = TextStyle(fontSize = 28.sp, lineHeight = 40.sp),
+    bodyMedium = TextStyle(fontSize = 24.sp, lineHeight = 32.sp),
+    labelLarge = TextStyle(fontSize = 28.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
+    labelMedium = TextStyle(fontSize = 24.sp, lineHeight = 32.sp, fontWeight = FontWeight.Medium),
 )
 
 @Composable

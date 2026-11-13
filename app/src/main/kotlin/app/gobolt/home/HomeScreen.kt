@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bolt
@@ -34,7 +33,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.gobolt.GoboltViewModel
 import app.gobolt.data.Trip
@@ -42,6 +40,8 @@ import app.gobolt.data.summary
 import app.gobolt.engine.EventKind
 import app.gobolt.engine.Plan
 import app.gobolt.ui.CardGap
+import app.gobolt.ui.CardShape
+import app.gobolt.ui.ControlShape
 import app.gobolt.ui.GoCard
 import app.gobolt.ui.GoboltTheme
 import app.gobolt.ui.IconTap
@@ -49,7 +49,9 @@ import app.gobolt.ui.Metric
 import app.gobolt.ui.PrimaryButton
 import app.gobolt.ui.SecondaryButton
 import app.gobolt.ui.SegmentedTabs
+import app.gobolt.ui.Sizing
 import app.gobolt.ui.SocBar
+import app.gobolt.ui.Spacing
 import app.gobolt.ui.pct
 import app.gobolt.ui.rounded
 import app.gobolt.ui.secondaryText
@@ -93,7 +95,7 @@ fun HomeScreen(
     Column(verticalArrangement = Arrangement.spacedBy(CardGap), modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             SearchBar(onNewTrip, Modifier.weight(1f))
-            Spacer(Modifier.size(12.dp))
+            Spacer(Modifier.size(Spacing.sm))
             IconTap(Icons.Rounded.Settings, "설정", onSettings)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(CardGap), modifier = Modifier.weight(1f)) {
@@ -105,10 +107,10 @@ fun HomeScreen(
                     Text("현재 잔량", style = MaterialTheme.typography.titleLarge, color = secondaryText())
                     Text(
                         vehicle.socPct?.let { "$it%" } ?: "--",
-                        style = MaterialTheme.typography.displayLarge,
+                        style = MaterialTheme.typography.displayMedium,
                     )
                     SocBar((vehicle.socPct ?: 0).toDouble(), floor)
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(Spacing.xs))
                     Text(
                         vehicle.socPct?.let { "주행 가능 약 ${viewModel.rangeKm(it).rounded()}km" } ?: "잔량 확인 중",
                         style = MaterialTheme.typography.headlineMedium,
@@ -152,14 +154,14 @@ private fun SearchBar(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
-            .height(96.dp)
-            .clip(RoundedCornerShape(28.dp))
+            .height(Sizing.button)
+            .clip(CardShape)
             .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick)
-            .padding(horizontal = 32.dp),
+            .padding(horizontal = Spacing.xl),
     ) {
-        Icon(Icons.Rounded.Search, null, Modifier.size(44.dp), tint = secondaryText())
-        Spacer(Modifier.size(16.dp))
+        Icon(Icons.Rounded.Search, null, Modifier.size(Sizing.iconLg), tint = secondaryText())
+        Spacer(Modifier.size(Spacing.md))
         Text("어디까지 고볼트?", style = MaterialTheme.typography.headlineMedium, color = secondaryText())
     }
 }
@@ -170,12 +172,12 @@ private fun Favorite(icon: ImageVector, label: String, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .height(88.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .height(Sizing.touch)
+            .clip(ControlShape)
             .clickable(onClick = onClick),
     ) {
-        Icon(icon, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurface)
-        Spacer(Modifier.size(20.dp))
+        Icon(icon, null, Modifier.size(Sizing.iconMd), tint = MaterialTheme.colorScheme.onSurface)
+        Spacer(Modifier.size(Spacing.lg))
         Text(label, style = MaterialTheme.typography.titleLarge)
     }
 }
@@ -210,17 +212,17 @@ private fun DailyContent(
     Column(verticalArrangement = Arrangement.spacedBy(CardGap), modifier = modifier) {
         GoCard(Modifier.fillMaxWidth().weight(1f)) {
             Text("오늘 (${today.label})", style = MaterialTheme.typography.titleLarge, color = secondaryText())
-            Text(pct(today.homeSoc), style = MaterialTheme.typography.displayMedium)
+            Text(pct(today.homeSoc), style = MaterialTheme.typography.displaySmall)
             Text("귀가 예상 잔량 · 오늘 ${today.km.rounded()}km", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.weight(1f))
             ChargeBanner(nextCharge, fallback)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), modifier = Modifier.fillMaxWidth()) {
             days.forEachIndexed { index, day ->
                 DayCell(day, today = index == 0, floor = floor, modifier = Modifier.weight(1f))
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(48.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xxl)) {
             Metric("${plan.summary.totalKm.rounded()}km", "이번 주 총 주행")
             Metric("${plan.summary.totalKwh.rounded()}kWh", "이번 주 총 전기 사용")
             Spacer(Modifier.weight(1f))
@@ -240,12 +242,12 @@ private fun ChargeBanner(day: WeekDay?, fallback: String?) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(ControlShape)
             .background(GoboltTheme.energy.track)
-            .padding(horizontal = 24.dp, vertical = 18.dp),
+            .padding(horizontal = Spacing.lg, vertical = Spacing.md),
     ) {
-        Icon(Icons.Rounded.Bolt, null, Modifier.size(40.dp), tint = GoboltTheme.energy.charge)
-        Spacer(Modifier.size(12.dp))
+        Icon(Icons.Rounded.Bolt, null, Modifier.size(Sizing.iconMd), tint = GoboltTheme.energy.charge)
+        Spacer(Modifier.size(Spacing.sm))
         Text(text, style = MaterialTheme.typography.titleLarge)
     }
 }
@@ -257,9 +259,9 @@ private fun DayCell(day: WeekDay, today: Boolean, floor: Double, modifier: Modif
         Text("${day.km.rounded()}km", style = MaterialTheme.typography.bodyMedium, color = secondaryText())
         Text(pct(day.homeSoc), style = MaterialTheme.typography.titleLarge, maxLines = 1)
         SocBar(day.homeSoc, floor)
-        Box(Modifier.height(40.dp)) {
+        Box(Modifier.height(Sizing.iconMd)) {
             if (day.charges) {
-                Icon(Icons.Rounded.Bolt, "충전 필요", Modifier.size(40.dp), tint = GoboltTheme.energy.charge)
+                Icon(Icons.Rounded.Bolt, "충전 필요", Modifier.size(Sizing.iconMd), tint = GoboltTheme.energy.charge)
             }
         }
     }
@@ -280,8 +282,8 @@ private fun TravelContent(
             Text("${trip.destination.name} 여행", style = MaterialTheme.typography.headlineLarge)
             Text(trip.summary(), style = MaterialTheme.typography.titleLarge)
             if (plan != null && plan.isFeasible) {
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(48.dp)) {
+                Spacer(Modifier.height(Spacing.sm))
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xxl)) {
                     Metric("${plan.summary.totalKm.rounded()}km", "총 주행")
                     Metric("${plan.summary.totalKwh.rounded()}kWh", "총 전기 사용")
                     Metric("${plan.stops.size}회", "충전")

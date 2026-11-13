@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
@@ -51,6 +50,7 @@ import app.gobolt.engine.Plan
 import app.gobolt.engine.Strategy
 import app.gobolt.engine.Suggestion
 import app.gobolt.ui.CardGap
+import app.gobolt.ui.CardShape
 import app.gobolt.ui.GoCard
 import app.gobolt.ui.GoboltTheme
 import app.gobolt.ui.IconTap
@@ -58,6 +58,8 @@ import app.gobolt.ui.Metric
 import app.gobolt.ui.PrimaryButton
 import app.gobolt.ui.ScreenHeader
 import app.gobolt.ui.SecondaryButton
+import app.gobolt.ui.Sizing
+import app.gobolt.ui.Spacing
 import app.gobolt.ui.pct
 import app.gobolt.ui.rounded
 import app.gobolt.ui.secondaryText
@@ -87,7 +89,7 @@ fun PlanScreen(
     LaunchedEffect(Unit) { viewModel.refreshNaviChargers() }
 
     val options: @Composable (Modifier) -> Unit = { panel ->
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = panel) {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.md), modifier = panel) {
             ScreenHeader(
                 "${trip.destination.name} 여행",
                 onBack,
@@ -130,7 +132,7 @@ fun PlanScreen(
 
     val overview: @Composable (Modifier) -> Unit = { panel ->
         Box(panel) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxSize()) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md), modifier = Modifier.fillMaxSize()) {
                 GoCard(Modifier.fillMaxWidth().weight(1f)) {
                     Box(Modifier.fillMaxSize()) {
                         val (line, stops) = viewModel.sketch(plan)
@@ -138,7 +140,7 @@ fun PlanScreen(
                         Column {
                             Text(
                                 if (plan.isFeasible) pct(plan.summary.endSocPct) else "--",
-                                style = MaterialTheme.typography.displayMedium,
+                                style = MaterialTheme.typography.displaySmall,
                             )
                             Text("도착 예상 잔량", style = MaterialTheme.typography.bodyLarge, color = secondaryText())
                         }
@@ -150,7 +152,7 @@ fun PlanScreen(
                         )
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), modifier = Modifier.fillMaxWidth()) {
                     plan.stops.take(MAX_STOP_CARDS).forEach { stop ->
                         StopCard(stop, viewModel.dayOffset(trip), Modifier.weight(1f)) { openStop = stop }
                     }
@@ -196,7 +198,7 @@ fun PlanScreen(
 private const val MAX_STOP_CARDS = 4
 private val SPLIT_MIN_WIDTH = 1200.dp
 private val STACKED_OPTIONS_HEIGHT = 1000.dp
-private val STACKED_OVERVIEW_HEIGHT = 1100.dp
+private val STACKED_OVERVIEW_HEIGHT = 1120.dp
 
 @Composable
 private fun StrategyCard(plan: Plan, selected: Boolean, onClick: () -> Unit) {
@@ -231,7 +233,7 @@ private fun ChangeCard(before: Plan?, after: Plan, onUndo: () -> Unit, onKeep: (
     GoCard(Modifier.fillMaxWidth()) {
         Text("변경 전 → 지금", style = MaterialTheme.typography.bodyMedium, color = secondaryText())
         Text("${describe(before)} → ${describe(after)}", style = MaterialTheme.typography.titleLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             SecondaryButton("되돌리기", onUndo, Modifier.weight(1f))
             SecondaryButton("유지", onKeep, Modifier.weight(1f))
         }
@@ -241,7 +243,7 @@ private fun ChangeCard(before: Plan?, after: Plan, onUndo: () -> Unit, onKeep: (
 @Composable
 private fun CarCampCard(night: Int, on: Boolean, onChange: (Boolean) -> Unit, before: Plan?, after: Plan) {
     GoCard(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 72.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = Sizing.row)) {
             Text("${night}일차 밤 차박", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             Switch(
                 checked = on,
@@ -251,7 +253,7 @@ private fun CarCampCard(night: Int, on: Boolean, onChange: (Boolean) -> Unit, be
                     uncheckedTrackColor = GoboltTheme.energy.track,
                     uncheckedBorderColor = secondaryText(),
                 ),
-                modifier = Modifier.scale(1.4f).padding(end = 8.dp),
+                modifier = Modifier.scale(1.4f).padding(end = Spacing.xs),
             )
         }
         if (on && before != null) {
@@ -269,7 +271,7 @@ private fun CarCampCard(night: Int, on: Boolean, onChange: (Boolean) -> Unit, be
 private fun StopCard(stop: ChargeStop, dayOffset: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
     GoCard(modifier = modifier, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.Bolt, null, Modifier.size(32.dp), tint = GoboltTheme.energy.charge)
+            Icon(Icons.Rounded.Bolt, null, Modifier.size(Sizing.iconSm), tint = GoboltTheme.energy.charge)
             Text(
                 "${stop.dayIndex + 1 + dayOffset}일차",
                 style = MaterialTheme.typography.bodyMedium,
@@ -298,29 +300,29 @@ private fun StopSheet(
         contentAlignment = Alignment.BottomCenter,
         modifier = Modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(28.dp))
+            .clip(CardShape)
             .background(Color.Black.copy(alpha = 0.4f))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose),
     ) {
         Surface(
             color = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(28.dp),
+            shape = CardShape,
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(32.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md), modifier = Modifier.padding(Spacing.xl)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stop.name, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.weight(1f))
                     IconTap(Icons.Rounded.Close, "닫기", onClose)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(48.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xxl)) {
                     Metric("${pct(stop.fromPct)} → ${pct(stop.toPct)}", "충전 잔량")
                     Metric(chargeTime(stop.minutes), "걸리는 시간")
                     Metric("${stop.powerKw.rounded()}kW", if (!powerKnown) "출력 미확인 · 가정값" else if (stop.fast) "평균 급속" else "완속")
                 }
                 if (alternatives.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(Spacing.xs))
                     Text("못 쓸 때 대체 충전소", style = MaterialTheme.typography.titleLarge, color = secondaryText())
                     alternatives.forEach { AlternativeRow(it) }
                     SecondaryButton("이 충전소 빼고 다시 계획", onExclude, Modifier.fillMaxWidth())
@@ -333,7 +335,7 @@ private fun StopSheet(
 @Composable
 private fun AlternativeRow(option: ChargerOption) {
     val usable = option.available && option.reachable && option.reachesDestination
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 72.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = Sizing.row)) {
         Text(option.charger.name, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
         Text(
             if (usable) {

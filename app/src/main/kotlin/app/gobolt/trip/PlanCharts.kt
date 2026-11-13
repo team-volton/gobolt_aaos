@@ -16,10 +16,9 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.sp
-import app.gobolt.navi.NaviPlace
 import app.gobolt.engine.EventKind
 import app.gobolt.engine.Plan
+import app.gobolt.navi.NaviPlace
 import app.gobolt.ui.GoboltTheme
 import app.gobolt.ui.secondaryText
 import kotlin.math.roundToInt
@@ -37,12 +36,12 @@ fun SocChart(plan: Plan, floorPct: Double, dayOffset: Int, modifier: Modifier = 
     val muted = secondaryText()
     val grid = energy.track
     val measurer = rememberTextMeasurer()
-    val label = TextStyle(fontSize = 24.sp, color = muted)
-    val warning = TextStyle(fontSize = 24.sp, color = energy.warning)
-    val value = TextStyle(fontSize = 24.sp, color = MaterialTheme.colorScheme.onSurface)
+    val label = MaterialTheme.typography.labelMedium.copy(color = muted)
+    val warning = MaterialTheme.typography.labelMedium.copy(color = energy.warning)
+    val value = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.onSurface)
 
     Canvas(modifier) {
-        val left = 76f
+        val left = 80f
         val top = 44f
         val bottom = size.height - 8f
         val right = size.width - 8f
@@ -60,7 +59,7 @@ fun SocChart(plan: Plan, floorPct: Double, dayOffset: Int, modifier: Modifier = 
 
         listOf(0.0, 50.0, 100.0).forEach { tick ->
             drawLine(grid, Offset(left, yOf(tick)), Offset(right, yOf(tick)), strokeWidth = 2f)
-            drawLabel(measurer, "${tick.toInt()}", Offset(0f, yOf(tick) - 18f), label)
+            drawLabel(measurer, "${tick.toInt()}", Offset(0f, yOf(tick) - 16f), label)
         }
 
         var x = left
@@ -69,7 +68,7 @@ fun SocChart(plan: Plan, floorPct: Double, dayOffset: Int, modifier: Modifier = 
             if (event.dayIndex != day) {
                 day = event.dayIndex
                 drawLine(grid, Offset(x, 0f), Offset(x, bottom), strokeWidth = 2f)
-                drawLabel(measurer, "${day + 1 + dayOffset}일차", Offset(x + 10f, 0f), label)
+                drawLabel(measurer, "${day + 1 + dayOffset}일차", Offset(x + 8f, 0f), label)
             }
             val next = x + widthOf(event.km, event.kind).toFloat() * scale
             val color = when (event.kind) {
@@ -99,8 +98,8 @@ fun SocChart(plan: Plan, floorPct: Double, dayOffset: Int, modifier: Modifier = 
             energy.warning,
             Offset(left, yOf(floorPct)),
             Offset(right, yOf(floorPct)),
-            strokeWidth = 3f,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f)),
+            strokeWidth = 4f,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(16f, 8f)),
         )
         val floorText = measurer.measure("▲ 하한 ${floorPct.roundToInt()}%", warning)
         drawText(
@@ -115,7 +114,7 @@ fun RouteSketch(line: List<NaviPlace>, stopPlaces: List<NaviPlace>, modifier: Mo
     val energy = GoboltTheme.energy
     val routeColor = energy.drive
     val measurer = rememberTextMeasurer()
-    val placeStyle = TextStyle(fontSize = 26.sp, color = MaterialTheme.colorScheme.onSurface)
+    val placeStyle = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.onSurface)
     val endColor = MaterialTheme.colorScheme.onSurface
 
     Canvas(modifier) {
@@ -139,12 +138,12 @@ fun RouteSketch(line: List<NaviPlace>, stopPlaces: List<NaviPlace>, modifier: Mo
             val point = project(place.latitude, place.longitude)
             if (index == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
         }
-        drawPath(path, routeColor, style = Stroke(width = 10f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        drawPath(path, routeColor, style = Stroke(width = 8f, cap = StrokeCap.Round, join = StrokeJoin.Round))
 
         listOf(line.first(), line.last()).forEach { place ->
             val point = project(place.latitude, place.longitude)
-            drawCircle(endColor, 14f, point)
-            drawLabel(measurer, place.name, point + Offset(22f, -18f), placeStyle)
+            drawCircle(endColor, 12f, point)
+            drawLabel(measurer, place.name, point + Offset(24f, -16f), placeStyle)
         }
         stopPlaces.forEachIndexed { index, place ->
             val point = project(place.latitude, place.longitude)
@@ -154,7 +153,7 @@ fun RouteSketch(line: List<NaviPlace>, stopPlaces: List<NaviPlace>, modifier: Mo
             drawLabel(
                 measurer,
                 place.name.removeSuffix("휴게소"),
-                point + Offset(-20f, if (below) 26f else -62f),
+                point + Offset(-20f, if (below) 24f else -64f),
                 placeStyle,
             )
         }

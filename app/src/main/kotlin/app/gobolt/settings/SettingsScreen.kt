@@ -37,6 +37,7 @@ import app.gobolt.ui.IconTap
 import app.gobolt.ui.ScreenHeader
 import app.gobolt.ui.SecondaryButton
 import app.gobolt.ui.SegmentedTabs
+import app.gobolt.ui.Spacing
 import app.gobolt.ui.secondaryText
 
 @Composable
@@ -49,7 +50,7 @@ fun SettingsScreen(viewModel: GoboltViewModel, onBack: () -> Unit, modifier: Mod
         Row(horizontalArrangement = Arrangement.spacedBy(CardGap), modifier = Modifier.weight(1f)) {
             GoCard(Modifier.weight(0.56f).fillMaxHeight()) {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                 ) {
                     Stepper("안전 하한", "${settings.floorPct}%") { delta ->
@@ -66,7 +67,7 @@ fun SettingsScreen(viewModel: GoboltViewModel, onBack: () -> Unit, modifier: Mod
                         viewModel.updateSettings { it.copy(commuteKm = (it.commuteKm + delta * 5).coerceIn(0, 300)) }
                     }
                     Text("출퇴근 요일", style = MaterialTheme.typography.titleLarge)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                         DemoTrip.weekdays.forEachIndexed { index, label ->
                             FilterChip(
                                 selected = index in settings.commuteDays,
@@ -147,7 +148,7 @@ private fun RoutineAdder(places: List<NaviPlace>, kmFor: (NaviPlace) -> Int, onA
             label = { Text(place.name, style = MaterialTheme.typography.titleLarge) },
         )
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         DemoTrip.weekdays.forEachIndexed { index, label ->
             FilterChip(
                 selected = index == weekday,
@@ -169,7 +170,7 @@ private fun Stepper(label: String, value: String, onStep: (Int) -> Unit) {
             value,
             style = MaterialTheme.typography.headlineMedium,
             textAlign = TextAlign.Center,
-            modifier = Modifier.width(140.dp).padding(horizontal = 4.dp),
+            modifier = Modifier.width(144.dp).padding(horizontal = Spacing.xxs),
         )
         IconTap(Icons.Rounded.Add, "$label 늘리기", { onStep(1) })
     }

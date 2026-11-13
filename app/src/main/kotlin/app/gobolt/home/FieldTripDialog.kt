@@ -22,6 +22,7 @@ import app.gobolt.ui.GoboltTheme
 import app.gobolt.ui.Metric
 import app.gobolt.ui.PrimaryButton
 import app.gobolt.ui.SecondaryButton
+import app.gobolt.ui.Spacing
 import app.gobolt.ui.pct
 import app.gobolt.ui.secondaryText
 
@@ -48,9 +49,9 @@ fun FieldTripDialog(
         confirmButton = {},
         title = { Text("외근 추가", style = MaterialTheme.typography.headlineLarge) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.lg), modifier = Modifier.fillMaxWidth()) {
                 if (result == null) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                         dayLabels.take(DAYS_AHEAD).forEachIndexed { index, label ->
                             FilterChip(
                                 selected = index == day,
@@ -70,7 +71,7 @@ fun FieldTripDialog(
                         }
                     }
                     Text("왕복 거리를 골라 주세요", style = MaterialTheme.typography.titleLarge, color = secondaryText())
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                         DISTANCES.forEach { value ->
                             SecondaryButton("${value}km", { km = value }, Modifier.weight(1f))
                         }
@@ -82,7 +83,7 @@ fun FieldTripDialog(
                         style = MaterialTheme.typography.headlineMedium,
                         color = if (result.canGo) MaterialTheme.colorScheme.onSurface else GoboltTheme.energy.warning,
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(64.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xxxl)) {
                         Metric(pct(result.beforePct), "외근 전 귀가 잔량")
                         Metric(pct(result.afterPct), "외근 후 귀가 잔량")
                     }

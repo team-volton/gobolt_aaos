@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -41,12 +40,15 @@ import app.gobolt.data.Trip
 import app.gobolt.data.label
 import app.gobolt.navi.NaviPlace
 import app.gobolt.ui.CardGap
+import app.gobolt.ui.ControlShape
 import app.gobolt.ui.GoCard
 import app.gobolt.ui.GoboltTheme
 import app.gobolt.ui.IconTap
 import app.gobolt.ui.PrimaryButton
 import app.gobolt.ui.ScreenHeader
 import app.gobolt.ui.SegmentedTabs
+import app.gobolt.ui.Sizing
+import app.gobolt.ui.Spacing
 import app.gobolt.ui.rounded
 import app.gobolt.ui.secondaryText
 
@@ -103,7 +105,7 @@ fun TripInputScreen(
                             "내비 즐겨찾기와 최근 목적지가 여기에 함께 표시돼요",
                             style = MaterialTheme.typography.bodyMedium,
                             color = secondaryText(),
-                            modifier = Modifier.padding(top = 12.dp),
+                            modifier = Modifier.padding(top = Spacing.sm),
                         )
                     }
                 }
@@ -182,14 +184,14 @@ private fun PlaceRow(name: String, selected: Boolean, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 88.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .heightIn(min = Sizing.touch)
+            .clip(ControlShape)
             .background(if (selected) GoboltTheme.energy.track else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = Spacing.md),
     ) {
-        Icon(Icons.Rounded.Place, null, Modifier.size(36.dp), tint = secondaryText())
-        Spacer(Modifier.size(16.dp))
+        Icon(Icons.Rounded.Place, null, Modifier.size(Sizing.iconMd), tint = secondaryText())
+        Spacer(Modifier.size(Spacing.md))
         Text(name, style = MaterialTheme.typography.titleLarge, maxLines = 2)
     }
 }
@@ -203,7 +205,7 @@ private fun Stepper(label: String, value: String, onStep: (Int) -> Unit) {
             value,
             style = MaterialTheme.typography.headlineMedium,
             textAlign = TextAlign.Center,
-            modifier = Modifier.width(220.dp),
+            modifier = Modifier.width(224.dp),
         )
         IconTap(Icons.Rounded.Add, "$label 늘리기", { onStep(1) })
     }
