@@ -40,6 +40,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
+data class FieldTripPreview(val beforePct: Double, val afterPct: Double, val canGo: Boolean)
+
 class GoboltViewModel(application: Application) : AndroidViewModel(application) {
     private val store = AppStore(application)
     private val car = VehicleGateway(application)
@@ -89,8 +91,10 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         planner.planAll(DemoTrip.schedule(soc, lodging), excluded)
     }.stateInUi(emptyList())
 
-    val weekPlan: StateFlow<Plan?> = combine(planner, startSoc, _settings) { planner, soc, settings ->
-        planner.plan(DemoTrip.week(soc, todayIndex, settings))
+    private val extraTodayKm = MutableStateFlow(0)
+
+    val weekPlan: StateFlow<Plan?> = combine(planner, startSoc, _settings, extraTodayKm) { planner, soc, settings, extra ->
+        planner.plan(DemoTrip.week(soc, todayIndex, settings, extra))
     }.stateInUi(null)
 
     val selectedPlan: StateFlow<Plan?> = combine(plans, _strategy) { plans, strategy ->
@@ -129,6 +133,34 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     fun rangeKm(socPct: Int): Double {
         val vehicle = vehicleWith(efficiencyFactor.value)
         return vehicle.kwhOf(socPct.toDouble()) * vehicle.kmPerKwh(RoadType.MIXED, null)
+    }
+
+    fun previewFieldTrip(km: Int): FieldTripPreview? {
+        val soc = car.state.value.socPct?.toDouble() ?: return null
+        val settings = _settings.value
+        val planner = Planner(vehicleWith(efficiencyFactor.value), settings.toConfig())
+        val before = planner.plan(DemoTrip.week(soc, todayIndex, settings, extraTodayKm.value))
+        val after = planner.plan(DemoTrip.week(soc, todayIndex, settings, extraTodayKm.value + km))
+        fun home(plan: Plan) = plan.events
+            .lastOrNull { it.dayIndex == 0 && it.kind !in CHARGE_KINDS }?.toPct ?: soc
+        return FieldTripPreview(home(before), home(after), after.isFeasible && home(after) >= settings.floorPct)
+    }
+
+    fun applyFieldTrip(km: Int) = extraTodayKm.update { it + km }
+
+    // 다음 급속 충전소를 빼고 내비 경로를 다시 보냄 / Drops the next fast charger and resends the route
+    fun replaceNextCharger(): String? {
+        val current = selectedPlan.value ?: return null
+        val id = current.stops.firstOrNull { it.dayIndex == 0 && it.fast }?.chargerId ?: return null
+        val excluded = _excludedChargers.value + id
+        val soc = session?.startSoc ?: (car.state.value.socPct ?: DEFAULT_SOC_PCT).toDouble()
+        val next = Planner(vehicleWith(efficiencyFactor.value), _settings.value.toConfig())
+            .plan(DemoTrip.schedule(soc, _tripInput.value), current.strategy, excluded)
+        if (!next.isFeasible) return null
+        _excludedChargers.value = excluded
+        val stops = next.stops.filter { it.dayIndex == 0 && it.fast }
+        navi.sendRoute(DemoTrip.busan, stops.mapNotNull { DemoTrip.placeOf(it.chargerId) })
+        return stops.firstOrNull()?.name
     }
 
     fun selectStrategy(strategy: Strategy) {
@@ -187,9 +219,11 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     // 차량 용량 기준 % 환산 / Converts to percent of the car's reported capacity
-    fun arrivalPct(leg: LiveLeg): Double? {
-        val capacity = car.state.value.capacityKwh ?: return null
-        return (leg.arrivalWh / 10.0 / capacity).takeIf { capacity > 0 }
+    fun arrivalPct(leg: LiveLeg): Double {
+        val reported = car.state.value.capacityKwh?.toDouble()?.takeIf { it > 0 }
+        // SDK 값은 환경에 따라 Wh로 올 수 있음 / The SDK value may arrive in watt-hours
+        val capacityKwh = reported?.let { if (it > WH_THRESHOLD) it / 1000 else it } ?: Vehicle.ioniq9Demo().capacityKwh
+        return leg.arrivalWh / 10.0 / capacityKwh
     }
 
     fun driveCheck(leg: LiveLeg, plannedArrivalPct: Double?): DriveCheck? {
@@ -208,6 +242,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     fun finishDrive(arrivedKm: Double? = null) {
         val active = session ?: return
         session = null
+        if (arrivedKm == null) navi.cancelRoute()
         val state = car.state.value
         val endSoc = state.socPct?.toDouble() ?: active.lastSoc
         val odometerKm = active.startOdometerKm?.let { start -> state.odometerKm?.minus(start)?.toDouble() }
@@ -253,5 +288,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
 
     private companion object {
         const val DEFAULT_SOC_PCT = 80
+        const val WH_THRESHOLD = 1000.0
+        val CHARGE_KINDS = setOf(EventKind.FAST_CHARGE, EventKind.SLOW_CHARGE)
     }
 }

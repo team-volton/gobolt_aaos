@@ -27,6 +27,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +45,7 @@ import app.gobolt.ui.GoboltTheme
 import app.gobolt.ui.IconTap
 import app.gobolt.ui.Metric
 import app.gobolt.ui.PrimaryButton
+import app.gobolt.ui.SecondaryButton
 import app.gobolt.ui.SegmentedTabs
 import app.gobolt.ui.SocBar
 import app.gobolt.ui.pct
@@ -65,6 +69,18 @@ fun HomeScreen(
     val plans by viewModel.plans.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val floor = settings.floorPct.toDouble()
+    var fieldTrip by remember { mutableStateOf(false) }
+
+    if (fieldTrip) {
+        FieldTripDialog(
+            preview = viewModel::previewFieldTrip,
+            onApply = {
+                viewModel.applyFieldTrip(it)
+                fieldTrip = false
+            },
+            onDismiss = { fieldTrip = false },
+        )
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(CardGap), modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -115,7 +131,7 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 when (mode) {
-                    DriveMode.Daily -> DailyContent(week, viewModel.weekLabels, floor, Modifier.weight(1f))
+                    DriveMode.Daily -> DailyContent(week, viewModel.weekLabels, floor, { fieldTrip = true }, Modifier.weight(1f))
                     DriveMode.Travel -> TravelContent(plans, onOpenTrip, onNewTrip, Modifier.weight(1f))
                 }
             }
@@ -170,7 +186,13 @@ private fun weekDays(plan: Plan, labels: List<String>): List<WeekDay> {
 }
 
 @Composable
-private fun DailyContent(plan: Plan?, labels: List<String>, floor: Double, modifier: Modifier = Modifier) {
+private fun DailyContent(
+    plan: Plan?,
+    labels: List<String>,
+    floor: Double,
+    onFieldTrip: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     if (plan == null) return
     val days = weekDays(plan, labels)
     val today = days.first()
@@ -192,6 +214,8 @@ private fun DailyContent(plan: Plan?, labels: List<String>, floor: Double, modif
         Row(horizontalArrangement = Arrangement.spacedBy(48.dp)) {
             Metric("${plan.summary.totalKm.rounded()}km", "이번 주 총 주행")
             Metric("${plan.summary.totalKwh.rounded()}kWh", "이번 주 총 전기 사용")
+            Spacer(Modifier.weight(1f))
+            SecondaryButton("외근 추가", onFieldTrip, icon = Icons.Rounded.Add)
         }
     }
 }

@@ -86,7 +86,7 @@ object DemoTrip {
     fun weekdaysFrom(todayIndex: Int): List<String> = List(7) { weekdays[(todayIndex + it) % 7] }
 
     // 오늘부터 7일 / Seven days starting today
-    fun week(startSocPct: Double, todayIndex: Int, settings: AppSettings): Schedule {
+    fun week(startSocPct: Double, todayIndex: Int, settings: AppSettings, extraTodayKm: Int = 0): Schedule {
         val commute = Activity.Local("출퇴근", km = settings.commuteKm.toDouble())
         val site = when (settings.homeCharge) {
             HomeCharge.NONE -> ChargingSite()
@@ -96,7 +96,9 @@ object DemoTrip {
             startSocPct = startSocPct,
             days = List(7) { offset ->
                 val weekday = (todayIndex + offset) % 7
-                Day(weekdays[weekday], if (weekday in settings.commuteDays) listOf(commute) else emptyList(), Night.Lodging(site))
+                val usual = if (weekday in settings.commuteDays) listOf(commute) else emptyList()
+                val extra = if (offset == 0 && extraTodayKm > 0) listOf(Activity.Local("외근", km = extraTodayKm.toDouble())) else emptyList()
+                Day(weekdays[weekday], usual + extra, Night.Lodging(site))
             },
         )
     }

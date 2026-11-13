@@ -1,0 +1,68 @@
+package app.gobolt.home
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import app.gobolt.FieldTripPreview
+import app.gobolt.ui.GoboltTheme
+import app.gobolt.ui.Metric
+import app.gobolt.ui.PrimaryButton
+import app.gobolt.ui.SecondaryButton
+import app.gobolt.ui.pct
+import app.gobolt.ui.secondaryText
+
+private val DISTANCES = listOf(30, 60, 90, 120)
+
+@Composable
+fun FieldTripDialog(
+    preview: (Int) -> FieldTripPreview?,
+    onApply: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var km by remember { mutableStateOf<Int?>(null) }
+    val result = km?.let(preview)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.widthIn(min = 760.dp),
+        confirmButton = {},
+        title = { Text("오늘 외근 추가", style = MaterialTheme.typography.headlineLarge) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.fillMaxWidth()) {
+                if (result == null) {
+                    Text("왕복 거리를 골라 주세요", style = MaterialTheme.typography.titleLarge, color = secondaryText())
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        DISTANCES.forEach { value ->
+                            SecondaryButton("${value}km", { km = value }, Modifier.weight(1f))
+                        }
+                    }
+                    SecondaryButton("닫기", onDismiss, Modifier.fillMaxWidth())
+                } else {
+                    Text(
+                        (if (result.canGo) "다녀와도 돼요" else "충전 없이는 어려워요") + " · 귀가 ${pct(result.afterPct)}",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = if (result.canGo) MaterialTheme.colorScheme.onSurface else GoboltTheme.energy.warning,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(64.dp)) {
+                        Metric(pct(result.beforePct), "외근 전 귀가 잔량")
+                        Metric(pct(result.afterPct), "외근 후 귀가 잔량")
+                    }
+                    PrimaryButton("충전 일정 반영", { onApply(km!!) }, Modifier.fillMaxWidth())
+                    SecondaryButton("취소", onDismiss, Modifier.fillMaxWidth())
+                }
+            }
+        },
+    )
+}
