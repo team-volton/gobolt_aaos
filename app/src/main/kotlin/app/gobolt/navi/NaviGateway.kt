@@ -34,6 +34,14 @@ data class LiveLeg(
     val isCharger: Boolean,
 )
 
+data class NaviCharger(
+    val name: String,
+    val place: NaviPlace,
+    val positionKm: Double,
+)
+
+data class NaviPlan(val startSoc: Int, val endSoc: Int, val minutes: Int)
+
 data class NaviState(
     val connected: Boolean = false,
     val routeActive: Boolean = false,
@@ -41,6 +49,9 @@ data class NaviState(
     val nextStop: LiveLeg? = null,
     val arrivedKm: Double? = null,
     val places: List<NaviPlace> = emptyList(),
+    // 내비가 경로 위에 표시한 충전소 / Chargers the navi marks on the route
+    val tripChargers: List<NaviCharger> = emptyList(),
+    val naviPlan: NaviPlan? = null,
     val log: List<String> = emptyList(),
 )
 
@@ -51,7 +62,19 @@ class NaviGateway(context: Context) {
     val state: StateFlow<NaviState> = _state.asStateFlow()
 
     private val listener = object : NaviHelperEventListener {
-        override fun onTripInfo(tripInfo: TripInfo) = log(describe(tripInfo))
+        override fun onTripInfo(tripInfo: TripInfo) {
+            log(describe(tripInfo))
+            val km = tripInfo.distance / 1000.0
+            val chargers = tripInfo.summary.routePoints
+                .filter { it.poiType == RoutePointPoiType.EV_CHARGING }
+                .map { point ->
+                    // 비율이 0~1 또는 0~100으로 올 수 있음 / The ratio may be 0-1 or 0-100
+                    val ratio = point.ratioOnRoute.let { if (it > 1) it / 100 else it }
+                    NaviCharger(point.poiName, NaviPlace(point.poiName, point.latitude, point.longitude), km * ratio)
+                }
+            _state.update { it.copy(tripChargers = chargers) }
+            chargers.forEach { log("내비 충전소: ${it.name} ${it.positionKm.toInt()}km 지점") }
+        }
 
         override fun onRouteStarted(routeStartInfo: RouteStartInfo) {
             _state.update { it.copy(routeActive = true, arrivedKm = null) }
@@ -64,7 +87,9 @@ class NaviGateway(context: Context) {
             // 경로 계산 중에는 0이 올 수 있음 / Zeros can arrive while the route is still being calculated
             val destination = drivingInfo.destination.toLeg().takeIf { it.remainKm > 0 } ?: return
             val next = drivingInfo.waypoints.firstOrNull()?.toLeg()?.takeIf { it.remainKm > 0 } ?: destination
-            _state.update { it.copy(routeActive = true, destination = destination, nextStop = next) }
+            val plan = drivingInfo.waypoints.firstOrNull { it.isChargingStation }?.chargingPlan
+                ?.let { NaviPlan(it.startSoc, it.endSoc, it.duration / 60) }
+            _state.update { it.copy(routeActive = true, destination = destination, nextStop = next, naviPlan = plan) }
         }
 
         override fun onDestinationArrived(destinationArrivedInfo: DestinationArrivedInfo) {
