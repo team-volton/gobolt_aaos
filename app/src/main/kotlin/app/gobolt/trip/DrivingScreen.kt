@@ -17,6 +17,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
@@ -55,6 +58,7 @@ fun DrivingScreen(viewModel: GoboltViewModel, onFinish: () -> Unit, modifier: Mo
     val selected by viewModel.selectedPlan.collectAsStateWithLifecycle()
     val navi by viewModel.naviState.collectAsStateWithLifecycle()
     val vehicle by viewModel.vehicleState.collectAsStateWithLifecycle()
+    var replaced by remember { mutableStateOf<String?>(null) }
     val plan = selected ?: return
     val planned = plannedLeg(plan) ?: return
     val live = navi.nextStop
@@ -128,6 +132,16 @@ fun DrivingScreen(viewModel: GoboltViewModel, onFinish: () -> Unit, modifier: Mo
                     Spacer(Modifier.size(12.dp))
                     Text("주행 중 입력 잠금", style = MaterialTheme.typography.bodyLarge, color = secondaryText())
                 }
+            }
+            replaced?.let {
+                Text("$it(으)로 경유지를 바꿨어요", style = MaterialTheme.typography.titleLarge, color = GoboltTheme.energy.charge)
+            }
+            if (!vehicle.driving && plan.stops.any { it.dayIndex == 0 && it.fast }) {
+                SecondaryButton(
+                    "다음 충전소를 못 써요",
+                    { replaced = viewModel.replaceNextCharger() ?: "다른 충전소가 없어 그대로 유지" },
+                    Modifier.fillMaxWidth(),
+                )
             }
             SecondaryButton("운행 종료", onFinish, Modifier.fillMaxWidth())
         }
