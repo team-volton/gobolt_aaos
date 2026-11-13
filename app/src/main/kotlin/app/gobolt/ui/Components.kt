@@ -31,16 +31,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
-// 운전 중 조작을 고려한 최소 터치 높이 / Minimum touch height for in-car use
-val TouchTarget = 88.dp
-val ScreenPadding = 28.dp
-val CardGap = 20.dp
+val ScreenPadding = Spacing.xl
+val CardGap = Spacing.lg
 
-private val CardShape = RoundedCornerShape(28.dp)
-private val ControlShape = RoundedCornerShape(22.dp)
+val CardShape = RoundedCornerShape(Radius.lg)
+val ControlShape = RoundedCornerShape(Radius.md)
+val InnerShape = RoundedCornerShape(Radius.sm)
 
 fun pct(value: Double) = "${value.roundToInt()}%"
 
@@ -53,7 +51,7 @@ fun GoCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val border = if (selected) BorderStroke(4.dp, MaterialTheme.colorScheme.primary) else null
+    val border = if (selected) BorderStroke(Sizing.selectedBorder, MaterialTheme.colorScheme.primary) else null
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = CardShape,
@@ -62,8 +60,8 @@ fun GoCard(
     ) {
         val tap = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
         Column(
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = tap.padding(28.dp),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+            modifier = tap.padding(Spacing.xl),
             content = content,
         )
     }
@@ -82,11 +80,11 @@ fun PrimaryButton(
         enabled = enabled,
         shape = ControlShape,
         colors = ButtonDefaults.buttonColors(),
-        modifier = modifier.heightIn(min = 96.dp),
+        modifier = modifier.heightIn(min = Sizing.button),
     ) {
         if (icon != null) {
-            Icon(icon, null, Modifier.size(36.dp))
-            Box(Modifier.width(12.dp))
+            Icon(icon, null, Modifier.size(Sizing.iconMd))
+            Box(Modifier.width(Spacing.sm))
         }
         Text(text, style = MaterialTheme.typography.headlineMedium)
     }
@@ -102,13 +100,13 @@ fun SecondaryButton(
     OutlinedButton(
         onClick = onClick,
         shape = ControlShape,
-        border = BorderStroke(2.dp, MaterialTheme.colorScheme.outline),
+        border = BorderStroke(Sizing.border, MaterialTheme.colorScheme.outline),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
-        modifier = modifier.heightIn(min = TouchTarget),
+        modifier = modifier.heightIn(min = Sizing.touch),
     ) {
         if (icon != null) {
-            Icon(icon, null, Modifier.size(32.dp))
-            Box(Modifier.width(10.dp))
+            Icon(icon, null, Modifier.size(Sizing.iconSm))
+            Box(Modifier.width(Spacing.sm))
         }
         Text(text, style = MaterialTheme.typography.labelLarge)
     }
@@ -119,11 +117,11 @@ fun IconTap(icon: ImageVector, description: String, onClick: () -> Unit, modifie
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .size(TouchTarget)
+            .size(Sizing.touch)
             .clip(ControlShape)
             .clickable(onClick = onClick),
     ) {
-        Icon(icon, description, Modifier.size(44.dp), tint = MaterialTheme.colorScheme.onSurface)
+        Icon(icon, description, Modifier.size(Sizing.iconLg), tint = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -131,7 +129,7 @@ fun IconTap(icon: ImageVector, description: String, onClick: () -> Unit, modifie
 fun ScreenHeader(title: String, onBack: () -> Unit, subtitle: String? = null) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconTap(Icons.AutoMirrored.Rounded.ArrowBack, "뒤로", onBack)
-        Column(Modifier.padding(start = 8.dp)) {
+        Column(Modifier.padding(start = Spacing.xs)) {
             Text(title, style = MaterialTheme.typography.headlineLarge, maxLines = 1)
             if (subtitle != null) {
                 Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = secondaryText())
@@ -146,7 +144,7 @@ fun <T> SegmentedTabs(options: List<Pair<T, String>>, selected: T, onSelect: (T)
         modifier = modifier
             .clip(ControlShape)
             .background(GoboltTheme.energy.track)
-            .padding(6.dp),
+            .padding(Spacing.xxs),
     ) {
         options.forEach { (value, label) ->
             val active = value == selected
@@ -154,8 +152,8 @@ fun <T> SegmentedTabs(options: List<Pair<T, String>>, selected: T, onSelect: (T)
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .weight(1f)
-                    .height(76.dp)
-                    .clip(RoundedCornerShape(18.dp))
+                    .height(Sizing.tab)
+                    .clip(InnerShape)
                     .background(if (active) MaterialTheme.colorScheme.surface else Color.Transparent)
                     .clickable { onSelect(value) },
             ) {
@@ -184,8 +182,8 @@ fun SocBar(socPct: Double, floorPct: Double, modifier: Modifier = Modifier) {
     Box(
         modifier
             .fillMaxWidth()
-            .height(14.dp)
-            .clip(RoundedCornerShape(7.dp))
+            .height(Sizing.bar)
+            .clip(InnerShape)
             .background(energy.track),
     ) {
         Box(
