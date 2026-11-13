@@ -28,6 +28,8 @@ data class Trip(
     val departMinutes: Int = 8 * 60 + 40,
     val localKm: List<Int> = listOf(90, 90),
     val nights: List<Stay> = List(3) { Stay.LODGING },
+    // 목적지를 고를 때의 위치 / Where the car was when the destination was chosen
+    val origin: NaviPlace? = null,
 ) {
     val startDate: LocalDate get() = LocalDate.ofEpochDay(startEpochDay)
 
@@ -64,6 +66,7 @@ data class TripLegs(
     val backChargers: List<Charger>,
     // 내비가 계산한 거리인지 / Whether the navi calculated the distance
     val measured: Boolean,
+    val backMeasured: Boolean = false,
 )
 
 object TripSchedule {
@@ -79,10 +82,11 @@ object TripSchedule {
         return 2 * EARTH_KM * asin(sqrt(a)) * ROAD_FACTOR
     }
 
-    fun build(trip: Trip, startSocPct: Double, legs: TripLegs, settings: AppSettings): Schedule {
+    // fromDay 이전 날은 이미 지난 일정 / Days before fromDay have already passed
+    fun build(trip: Trip, startSocPct: Double, legs: TripLegs, settings: AppSettings, fromDay: Int = 0): Schedule {
         val slow = ChargingSite(slow = ChargingPlace("숙소 완속", 7.0, targetPct = 90.0))
         val lastDay = trip.nights.size
-        val days = (0..lastDay).map { day ->
+        val days = (fromDay.coerceIn(0, lastDay)..lastDay).map { day ->
             val label = trip.dateOf(day).label()
             val activities = when (day) {
                 0 -> listOf(Activity.Drive("${trip.destination.name}까지", legs.outKm, chargers = legs.outChargers))

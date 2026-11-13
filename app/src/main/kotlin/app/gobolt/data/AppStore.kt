@@ -32,6 +32,8 @@ data class DriveRecord(
     val plannedEndSocPct: Double,
 )
 
+const val ORIGIN_NAME = "출발지"
+
 class AppStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("gobolt", Context.MODE_PRIVATE)
 
@@ -68,6 +70,11 @@ class AppStore(context: Context) {
                 departMinutes = json.getInt("departMinutes"),
                 localKm = List(km.length(), km::getInt),
                 nights = List(nights.length()) { Stay.valueOf(nights.getString(it)) },
+                origin = if (json.has("originLat")) {
+                    NaviPlace(ORIGIN_NAME, json.getDouble("originLat"), json.getDouble("originLon"))
+                } else {
+                    null
+                },
             )
         } catch (e: org.json.JSONException) {
             Trip()
@@ -83,6 +90,7 @@ class AppStore(context: Context) {
             .put("departMinutes", trip.departMinutes)
             .put("localKm", JSONArray(trip.localKm))
             .put("nights", JSONArray(trip.nights.map { it.name }))
+        trip.origin?.let { json.put("originLat", it.latitude).put("originLon", it.longitude) }
         prefs.edit().putString(KEY_TRIP, json.toString()).apply()
     }
 
