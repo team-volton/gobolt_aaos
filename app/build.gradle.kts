@@ -6,6 +6,7 @@ plugins {
 android {
     namespace = "app.gobolt"
     compileSdk = 36
+    useLibrary("android.car")
 
     defaultConfig {
         applicationId = "app.gobolt"
