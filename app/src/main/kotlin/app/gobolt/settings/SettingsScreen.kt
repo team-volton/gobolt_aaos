@@ -74,6 +74,7 @@ fun SettingsScreen(viewModel: GoboltViewModel, onBack: () -> Unit, modifier: Mod
                             )
                         }
                     }
+                    Text("차량 " + viewModel.vehicleSummary(), style = MaterialTheme.typography.bodyLarge, color = secondaryText())
                     Text("집 · 회사 충전", style = MaterialTheme.typography.titleLarge)
                     SegmentedTabs(
                         options = HomeCharge.entries.map { it to it.label },

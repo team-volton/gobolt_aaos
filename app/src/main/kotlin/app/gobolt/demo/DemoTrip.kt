@@ -11,18 +11,7 @@ import app.gobolt.engine.Night
 import app.gobolt.engine.Schedule
 import app.gobolt.navi.NaviPlace
 
-enum class Stay { LODGING, CAR_CAMP }
-
-data class TripInput(
-    val localKm: List<Int> = listOf(90, 90),
-    val nights: List<Stay> = listOf(Stay.LODGING, Stay.LODGING, Stay.LODGING),
-) {
-    val totalKm: Int get() = DemoTrip.LEG_KM * 2 + localKm.sum()
-}
-
 object DemoTrip {
-    const val LEG_KM = 400
-
     // 내비 연동과 개략도 전용 근사 좌표 / Approximate coordinates for navi checks and the sketch only
     val seoul = NaviPlace("서울", 37.5550, 126.9707)
     val busan = NaviPlace("부산역", 35.1152, 129.0415)
@@ -47,45 +36,8 @@ object DemoTrip {
         Charger("pyeongsa-s", "평사휴게소", 294.0, 100.0),
     )
 
-    fun schedule(
-        startSocPct: Double,
-        input: TripInput = TripInput(),
-        outbound: List<Charger> = outboundChargers,
-    ): Schedule {
-        val slow = ChargingSite(slow = ChargingPlace("숙소 완속", 7.0, targetPct = 90.0))
-        fun night(index: Int) = when (input.nights[index]) {
-            Stay.LODGING -> Night.Lodging(slow)
-            Stay.CAR_CAMP -> Night.CarCamp()
-        }
-        return Schedule(
-            startSocPct = startSocPct,
-            days = listOf(
-                Day(
-                    "1일차",
-                    listOf(
-                        Activity.Drive(
-                            "서울 → 부산",
-                            LEG_KM.toDouble(),
-                            chargers = outbound,
-                        ),
-                    ),
-                    night(0),
-                ),
-                Day("2일차", listOf(Activity.Local("현지 이동", km = input.localKm[0].toDouble())), night(1)),
-                Day("3일차", listOf(Activity.Local("현지 이동", km = input.localKm[1].toDouble())), night(2)),
-                Day(
-                    "4일차",
-                    listOf(
-                        Activity.Drive(
-                            "부산 → 서울",
-                            LEG_KM.toDouble(),
-                            chargers = listOf(Charger("chilgok-n", "칠곡휴게소(서울방향)", 160.0, 350.0)),
-                        ),
-                    ),
-                ),
-            ),
-        )
-    }
+    // 경부선 서울 → 부산 기준 / Gyeongbu line, Seoul to Busan
+    val returnChargers = listOf(Charger("chilgok-n", "칠곡휴게소(서울방향)", 160.0, 350.0))
 
     val weekdays = listOf("월", "화", "수", "목", "금", "토", "일")
 

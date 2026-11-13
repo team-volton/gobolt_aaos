@@ -37,6 +37,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.gobolt.GoboltViewModel
+import app.gobolt.data.Trip
+import app.gobolt.data.summary
 import app.gobolt.engine.EventKind
 import app.gobolt.engine.Plan
 import app.gobolt.ui.CardGap
@@ -68,6 +70,7 @@ fun HomeScreen(
     val week by viewModel.weekPlan.collectAsStateWithLifecycle()
     val plans by viewModel.plans.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val trip by viewModel.trip.collectAsStateWithLifecycle()
     val floor = settings.floorPct.toDouble()
     var fieldTrip by remember { mutableStateOf(false) }
 
@@ -132,7 +135,7 @@ fun HomeScreen(
                 )
                 when (mode) {
                     DriveMode.Daily -> DailyContent(week, viewModel.weekLabels, floor, { fieldTrip = true }, Modifier.weight(1f))
-                    DriveMode.Travel -> TravelContent(plans, onOpenTrip, onNewTrip, Modifier.weight(1f))
+                    DriveMode.Travel -> TravelContent(trip, plans, onOpenTrip, onNewTrip, Modifier.weight(1f))
                 }
             }
         }
@@ -254,6 +257,7 @@ private fun DayCell(day: WeekDay, today: Boolean, floor: Double, modifier: Modif
 
 @Composable
 private fun TravelContent(
+    trip: Trip,
     plans: List<Plan>,
     onOpenTrip: () -> Unit,
     onNewTrip: () -> Unit,
@@ -263,8 +267,8 @@ private fun TravelContent(
     Column(verticalArrangement = Arrangement.spacedBy(CardGap), modifier = modifier) {
         GoCard(Modifier.fillMaxWidth(), onClick = onOpenTrip) {
             Text("내 여행", style = MaterialTheme.typography.titleLarge, color = secondaryText())
-            Text("서울 → 부산", style = MaterialTheme.typography.headlineLarge)
-            Text("11월 1일 08:40 출발 · 3박 4일", style = MaterialTheme.typography.titleLarge)
+            Text("${trip.destination.name} 여행", style = MaterialTheme.typography.headlineLarge)
+            Text(trip.summary(), style = MaterialTheme.typography.titleLarge)
             if (plan != null && plan.isFeasible) {
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(48.dp)) {

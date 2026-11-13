@@ -1,8 +1,7 @@
 package app.gobolt.data
 
 import android.content.Context
-import app.gobolt.demo.Stay
-import app.gobolt.demo.TripInput
+import app.gobolt.navi.NaviPlace
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -58,21 +57,41 @@ class AppStore(context: Context) {
         prefs.edit().putString(KEY_SETTINGS, json.toString()).apply()
     }
 
-    fun loadTrip(): TripInput {
-        val json = prefs.getString(KEY_TRIP, null)?.let(::JSONObject) ?: return TripInput()
-        val km = json.getJSONArray("localKm")
-        val nights = json.getJSONArray("nights")
-        return TripInput(
-            localKm = List(km.length(), km::getInt),
-            nights = List(nights.length()) { Stay.valueOf(nights.getString(it)) },
-        )
+    fun loadTrip(): Trip {
+        val json = prefs.getString(KEY_TRIP, null)?.let(::JSONObject) ?: return Trip()
+        return try {
+            val km = json.getJSONArray("localKm")
+            val nights = json.getJSONArray("nights")
+            Trip(
+                destination = NaviPlace(json.getString("name"), json.getDouble("lat"), json.getDouble("lon")),
+                startEpochDay = json.getLong("startEpochDay"),
+                departMinutes = json.getInt("departMinutes"),
+                localKm = List(km.length(), km::getInt),
+                nights = List(nights.length()) { Stay.valueOf(nights.getString(it)) },
+            )
+        } catch (e: org.json.JSONException) {
+            Trip()
+        }
     }
 
-    fun save(trip: TripInput) {
+    fun save(trip: Trip) {
         val json = JSONObject()
+            .put("name", trip.destination.name)
+            .put("lat", trip.destination.latitude)
+            .put("lon", trip.destination.longitude)
+            .put("startEpochDay", trip.startEpochDay)
+            .put("departMinutes", trip.departMinutes)
             .put("localKm", JSONArray(trip.localKm))
             .put("nights", JSONArray(trip.nights.map { it.name }))
         prefs.edit().putString(KEY_TRIP, json.toString()).apply()
+    }
+
+    // 오늘 날짜에만 유효 / Valid only for today
+    fun loadExtraKm(epochDay: Long): Int =
+        if (prefs.getLong(KEY_EXTRA_DAY, -1) == epochDay) prefs.getInt(KEY_EXTRA_KM, 0) else 0
+
+    fun saveExtraKm(epochDay: Long, km: Int) {
+        prefs.edit().putLong(KEY_EXTRA_DAY, epochDay).putInt(KEY_EXTRA_KM, km).apply()
     }
 
     fun loadEfficiencyFactor(): Double = prefs.getFloat(KEY_EFFICIENCY, 1f).toDouble()
@@ -112,7 +131,9 @@ class AppStore(context: Context) {
 
     private companion object {
         const val KEY_SETTINGS = "settings"
-        const val KEY_TRIP = "trip"
+        const val KEY_TRIP = "trip_v2"
+        const val KEY_EXTRA_DAY = "extra_day"
+        const val KEY_EXTRA_KM = "extra_km"
         const val KEY_EFFICIENCY = "efficiency_factor"
         const val KEY_RECORD = "last_record"
     }

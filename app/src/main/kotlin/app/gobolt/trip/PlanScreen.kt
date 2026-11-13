@@ -43,7 +43,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.gobolt.GoboltViewModel
-import app.gobolt.demo.Stay
+import app.gobolt.data.Stay
+import app.gobolt.data.summary
 import app.gobolt.engine.ChargeStop
 import app.gobolt.engine.ChargerOption
 import app.gobolt.engine.Plan
@@ -61,8 +62,6 @@ import app.gobolt.ui.pct
 import app.gobolt.ui.rounded
 import app.gobolt.ui.secondaryText
 
-private const val THIRD_NIGHT = 2
-
 fun strategyName(strategy: Strategy) = when (strategy) {
     Strategy.FEWEST_STOPS -> "충전 횟수 최소"
     Strategy.FASTEST -> "소요 시간 최소"
@@ -79,7 +78,8 @@ fun PlanScreen(
     val plans by viewModel.plans.collectAsStateWithLifecycle()
     val baseline by viewModel.lodgingPlans.collectAsStateWithLifecycle()
     val strategy by viewModel.strategy.collectAsStateWithLifecycle()
-    val input by viewModel.tripInput.collectAsStateWithLifecycle()
+    val trip by viewModel.trip.collectAsStateWithLifecycle()
+    val lastNight = trip.nights.lastIndex
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val plan = plans.firstOrNull { it.strategy == strategy } ?: return
     val before = baseline.firstOrNull { it.strategy == strategy }
@@ -89,9 +89,9 @@ fun PlanScreen(
     val options: @Composable (Modifier) -> Unit = { panel ->
         Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = panel) {
             ScreenHeader(
-                "서울 → 부산",
+                "${trip.destination.name} 여행",
                 onBack,
-                "11/1 08:40 출발 · 충전소 " + if (viewModel.usesNaviChargers) "내비 추천" else "기본 목록",
+                trip.summary() + " · 충전소 " + viewModel.chargerSource,
             )
             plans.forEach { candidate ->
                 StrategyCard(candidate, candidate.strategy == strategy) {
@@ -99,8 +99,9 @@ fun PlanScreen(
                 }
             }
             CarCampCard(
-                on = input.nights[THIRD_NIGHT] == Stay.CAR_CAMP,
-                onChange = { viewModel.setStay(THIRD_NIGHT, if (it) Stay.CAR_CAMP else Stay.LODGING) },
+                night = lastNight + 1,
+                on = trip.nights[lastNight] == Stay.CAR_CAMP,
+                onChange = { viewModel.setStay(lastNight, if (it) Stay.CAR_CAMP else Stay.LODGING) },
                 before = before,
                 after = plan,
             )
@@ -123,7 +124,8 @@ fun PlanScreen(
             Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxSize()) {
                 GoCard(Modifier.fillMaxWidth().weight(1f)) {
                     Box(Modifier.fillMaxSize()) {
-                        RouteSketch(plan, Modifier.fillMaxSize())
+                        val (line, stops) = viewModel.sketch(plan)
+                        RouteSketch(line, stops, Modifier.fillMaxSize())
                         Column {
                             Text(
                                 if (plan.isFeasible) pct(plan.summary.endSocPct) else "--",
@@ -210,10 +212,10 @@ private fun StrategyCard(plan: Plan, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun CarCampCard(on: Boolean, onChange: (Boolean) -> Unit, before: Plan?, after: Plan) {
+private fun CarCampCard(night: Int, on: Boolean, onChange: (Boolean) -> Unit, before: Plan?, after: Plan) {
     GoCard(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 72.dp)) {
-            Text("3일차 밤 차박", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            Text("${night}일차 밤 차박", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             Switch(
                 checked = on,
                 onCheckedChange = onChange,

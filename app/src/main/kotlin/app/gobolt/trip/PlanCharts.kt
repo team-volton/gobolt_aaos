@@ -17,7 +17,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.sp
-import app.gobolt.demo.DemoTrip
+import app.gobolt.navi.NaviPlace
 import app.gobolt.engine.EventKind
 import app.gobolt.engine.Plan
 import app.gobolt.ui.GoboltTheme
@@ -27,6 +27,9 @@ import kotlin.math.roundToInt
 // 거리가 없는 이벤트의 그래프 폭(km 환산) / Chart width, in km, for events without distance
 private const val FAST_CHARGE_WIDTH = 30.0
 private const val OTHER_EVENT_WIDTH = 50.0
+
+// 같은 좌표일 때 0으로 나누지 않게 / Avoids dividing by zero for identical points
+private const val MIN_SPAN = 0.01
 
 @Composable
 fun SocChart(plan: Plan, floorPct: Double, modifier: Modifier = Modifier) {
@@ -108,20 +111,18 @@ fun SocChart(plan: Plan, floorPct: Double, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun RouteSketch(plan: Plan, modifier: Modifier = Modifier) {
+fun RouteSketch(line: List<NaviPlace>, stopPlaces: List<NaviPlace>, modifier: Modifier = Modifier) {
     val energy = GoboltTheme.energy
     val routeColor = energy.drive
     val measurer = rememberTextMeasurer()
     val placeStyle = TextStyle(fontSize = 26.sp, color = MaterialTheme.colorScheme.onSurface)
     val endColor = MaterialTheme.colorScheme.onSurface
-    val line = DemoTrip.routeLine
-    val stopPlaces = plan.stops.mapNotNull { DemoTrip.placeOf(it.chargerId) }.distinct()
 
     Canvas(modifier) {
         val minLat = line.minOf { it.latitude }
-        val maxLat = line.maxOf { it.latitude }
+        val maxLat = maxOf(line.maxOf { it.latitude }, minLat + MIN_SPAN)
         val minLon = line.minOf { it.longitude }
-        val maxLon = line.maxOf { it.longitude }
+        val maxLon = maxOf(line.maxOf { it.longitude }, minLon + MIN_SPAN)
         // 왼쪽 위는 잔량 표시 자리 / The top left is reserved for the arrival figure
         val startX = size.width * 0.28f
         val endX = size.width * 0.92f
