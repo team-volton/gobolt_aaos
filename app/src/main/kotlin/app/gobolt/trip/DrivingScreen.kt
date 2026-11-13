@@ -57,7 +57,7 @@ private fun plannedLeg(plan: Plan): NextLeg? {
 fun DrivingScreen(viewModel: GoboltViewModel, onFinish: () -> Unit, modifier: Modifier = Modifier) {
     val selected by viewModel.selectedPlan.collectAsStateWithLifecycle()
     val navi by viewModel.naviState.collectAsStateWithLifecycle()
-    val vehicle by viewModel.vehicleState.collectAsStateWithLifecycle()
+    val locked by viewModel.inputLocked.collectAsStateWithLifecycle()
     var replaced by remember { mutableStateOf<String?>(null) }
     val plan = selected ?: return
     val planned = plannedLeg(plan) ?: return
@@ -135,7 +135,7 @@ fun DrivingScreen(viewModel: GoboltViewModel, onFinish: () -> Unit, modifier: Mo
                     }
                 }
             }
-            if (vehicle.driving) {
+            if (locked) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.Lock, null, Modifier.size(36.dp), tint = secondaryText())
                     Spacer(Modifier.size(12.dp))
@@ -145,7 +145,7 @@ fun DrivingScreen(viewModel: GoboltViewModel, onFinish: () -> Unit, modifier: Mo
             replaced?.let {
                 Text("$it(으)로 경유지를 바꿨어요", style = MaterialTheme.typography.titleLarge, color = GoboltTheme.energy.charge)
             }
-            if (!vehicle.driving && plan.stops.any { it.dayIndex == 0 && it.fast }) {
+            if (!locked && plan.stops.any { it.dayIndex == 0 && it.fast }) {
                 SecondaryButton(
                     "다음 충전소를 못 써요",
                     { replaced = viewModel.replaceNextCharger() ?: "다른 충전소가 없어 그대로 유지" },

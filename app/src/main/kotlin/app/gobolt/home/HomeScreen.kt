@@ -72,6 +72,7 @@ fun HomeScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val trip by viewModel.trip.collectAsStateWithLifecycle()
     val navi by viewModel.naviState.collectAsStateWithLifecycle()
+    val fallback by viewModel.sharedFallback.collectAsStateWithLifecycle()
     val floor = settings.floorPct.toDouble()
     var fieldTrip by remember { mutableStateOf(false) }
 
@@ -137,7 +138,7 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 when (mode) {
-                    DriveMode.Daily -> DailyContent(week, viewModel.weekLabels, floor, { fieldTrip = true }, Modifier.weight(1f))
+                    DriveMode.Daily -> DailyContent(week, viewModel.weekLabels, floor, fallback, { fieldTrip = true }, Modifier.weight(1f))
                     DriveMode.Travel -> TravelContent(trip, plans, onOpenTrip, onNewTrip, Modifier.weight(1f))
                 }
             }
@@ -196,6 +197,7 @@ private fun DailyContent(
     plan: Plan?,
     labels: List<String>,
     floor: Double,
+    fallback: String?,
     onFieldTrip: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -210,7 +212,7 @@ private fun DailyContent(
             Text(pct(today.homeSoc), style = MaterialTheme.typography.displayMedium)
             Text("귀가 예상 잔량 · 오늘 ${today.km.rounded()}km", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.weight(1f))
-            ChargeBanner(nextCharge)
+            ChargeBanner(nextCharge, fallback)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             days.forEachIndexed { index, day ->
@@ -227,8 +229,12 @@ private fun DailyContent(
 }
 
 @Composable
-private fun ChargeBanner(day: WeekDay?) {
-    val text = if (day != null) "${day.label}요일 밤 완속 충전" else "이번 주는 충전하지 않아도 돼요"
+private fun ChargeBanner(day: WeekDay?, fallback: String?) {
+    val text = if (day != null) {
+        "${day.label}요일 밤 완속 충전" + (fallback?.let { " · $it" } ?: "")
+    } else {
+        "이번 주는 충전하지 않아도 돼요"
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier

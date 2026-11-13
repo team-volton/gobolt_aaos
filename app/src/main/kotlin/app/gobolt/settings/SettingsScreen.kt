@@ -17,13 +17,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.gobolt.GoboltViewModel
+import app.gobolt.data.EfficiencyMode
 import app.gobolt.data.HomeCharge
+import app.gobolt.data.Routine
 import app.gobolt.demo.DemoTrip
 import app.gobolt.ui.CardGap
 import app.gobolt.ui.GoCard
@@ -75,6 +80,27 @@ fun SettingsScreen(viewModel: GoboltViewModel, onBack: () -> Unit, modifier: Mod
                         }
                     }
                     Text("차량 " + viewModel.vehicleSummary(), style = MaterialTheme.typography.bodyLarge, color = secondaryText())
+                    Text("반복 일정", style = MaterialTheme.typography.titleLarge)
+                    settings.routines.forEachIndexed { index, routine ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${DemoTrip.weekdays[routine.weekday]}요일 ${routine.label} ${routine.km}km",
+                                style = MaterialTheme.typography.titleLarge,
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconTap(Icons.Rounded.Remove, "삭제", {
+                                viewModel.updateSettings { it.copy(routines = it.routines.filterIndexed { i, _ -> i != index }) }
+                            })
+                        }
+                    }
+                    RoutineAdder { routine -> viewModel.updateSettings { it.copy(routines = it.routines + routine) } }
+                    Text("전비 기준", style = MaterialTheme.typography.titleLarge)
+                    SegmentedTabs(
+                        options = EfficiencyMode.entries.map { it to it.label },
+                        selected = settings.efficiencyMode,
+                        onSelect = { value -> viewModel.updateSettings { it.copy(efficiencyMode = value) } },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     Text("집 · 회사 충전", style = MaterialTheme.typography.titleLarge)
                     SegmentedTabs(
                         options = HomeCharge.entries.map { it to it.label },
@@ -100,6 +126,23 @@ fun SettingsScreen(viewModel: GoboltViewModel, onBack: () -> Unit, modifier: Mod
             }
         }
     }
+}
+
+@Composable
+private fun RoutineAdder(onAdd: (Routine) -> Unit) {
+    var weekday by remember { mutableStateOf(3) }
+    var km by remember { mutableStateOf(30) }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        DemoTrip.weekdays.forEachIndexed { index, label ->
+            FilterChip(
+                selected = index == weekday,
+                onClick = { weekday = index },
+                label = { Text(label, style = MaterialTheme.typography.titleLarge) },
+            )
+        }
+    }
+    Stepper("약속 왕복", "${km}km") { km = (km + it * 10).coerceIn(10, 300) }
+    SecondaryButton("반복 일정 추가", { onAdd(Routine(weekday, km)) }, Modifier.fillMaxWidth())
 }
 
 @Composable

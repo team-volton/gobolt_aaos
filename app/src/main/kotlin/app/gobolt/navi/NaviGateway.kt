@@ -56,6 +56,8 @@ data class NaviState(
     val tripKm: Double? = null,
     val currentLocation: NaviPlace? = null,
     val naviPlan: NaviPlan? = null,
+    // 주행 중 내비가 알려준 충전기 최대 출력 / Max charger power the navi reports while driving
+    val chargerKw: Map<String, Int> = emptyMap(),
     val log: List<String> = emptyList(),
 )
 
@@ -93,7 +95,12 @@ class NaviGateway(context: Context) {
             val next = drivingInfo.waypoints.firstOrNull()?.toLeg()?.takeIf { it.remainKm > 0 } ?: destination
             val plan = drivingInfo.waypoints.firstOrNull { it.isChargingStation }?.chargingPlan
                 ?.let { NaviPlan(it.startSoc, it.endSoc, it.duration / 60) }
-            _state.update { it.copy(routeActive = true, destination = destination, nextStop = next, naviPlan = plan) }
+            val powers = drivingInfo.waypoints
+                .filter { it.isChargingStation && it.maxChargingPower in MIN_CHARGER_KW..MAX_CHARGER_KW }
+                .associate { it.name to it.maxChargingPower }
+            _state.update {
+                it.copy(routeActive = true, destination = destination, nextStop = next, naviPlan = plan, chargerKw = it.chargerKw + powers)
+            }
         }
 
         override fun onDestinationArrived(destinationArrivedInfo: DestinationArrivedInfo) {
@@ -224,5 +231,7 @@ class NaviGateway(context: Context) {
     private companion object {
         val WAYPOINT_SLOTS = listOf(WaypointIndex.FIRST, WaypointIndex.SECOND)
         const val MAX_LOG_LINES = 30
+        const val MIN_CHARGER_KW = 3
+        const val MAX_CHARGER_KW = 400
     }
 }

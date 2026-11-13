@@ -11,6 +11,13 @@ enum class HomeCharge(val label: String) {
     NONE("없음"),
 }
 
+enum class EfficiencyMode(val label: String) {
+    DEMO("시연 4.0"),
+    RATED("공인 + 기온"),
+}
+
+data class Routine(val weekday: Int, val km: Int, val label: String = "약속")
+
 data class AppSettings(
     val floorPct: Int = 20,
     val targetPct: Int = 80,
@@ -18,6 +25,8 @@ data class AppSettings(
     val commuteKm: Int = 40,
     // 0 = 월요일 / 0 is Monday
     val commuteDays: Set<Int> = setOf(0, 1, 2, 3, 4),
+    val routines: List<Routine> = emptyList(),
+    val efficiencyMode: EfficiencyMode = EfficiencyMode.DEMO,
 )
 
 data class DriveRecord(
@@ -30,6 +39,7 @@ data class DriveRecord(
     val chargedPct: Double,
     val plannedKwh: Double,
     val plannedEndSocPct: Double,
+    val epochDay: Long = 0,
 )
 
 const val ORIGIN_NAME = "출발지"
@@ -46,6 +56,15 @@ class AppStore(context: Context) {
             homeCharge = HomeCharge.valueOf(json.getString("homeCharge")),
             commuteKm = json.getInt("commuteKm"),
             commuteDays = List(days.length(), days::getInt).toSet(),
+            routines = json.optJSONArray("routines")?.let { list ->
+                List(list.length()) {
+                    val item = list.getJSONObject(it)
+                    Routine(item.getInt("weekday"), item.getInt("km"), item.getString("label"))
+                }
+            } ?: emptyList(),
+            efficiencyMode = json.optString("efficiencyMode").let { name ->
+                EfficiencyMode.entries.firstOrNull { it.name == name } ?: EfficiencyMode.DEMO
+            },
         )
     }
 
@@ -56,6 +75,11 @@ class AppStore(context: Context) {
             .put("homeCharge", settings.homeCharge.name)
             .put("commuteKm", settings.commuteKm)
             .put("commuteDays", JSONArray(settings.commuteDays.toList()))
+            .put(
+                "routines",
+                JSONArray(settings.routines.map { JSONObject().put("weekday", it.weekday).put("km", it.km).put("label", it.label) }),
+            )
+            .put("efficiencyMode", settings.efficiencyMode.name)
         prefs.edit().putString(KEY_SETTINGS, json.toString()).apply()
     }
 
@@ -108,33 +132,44 @@ class AppStore(context: Context) {
         prefs.edit().putFloat(KEY_EFFICIENCY, factor.toFloat()).apply()
     }
 
-    fun loadRecord(): DriveRecord? {
-        val json = prefs.getString(KEY_RECORD, null)?.let(::JSONObject) ?: return null
-        return DriveRecord(
-            name = json.getString("name"),
-            km = json.getDouble("km"),
-            minutes = json.getDouble("minutes"),
-            startSocPct = json.getDouble("startSocPct"),
-            endSocPct = json.getDouble("endSocPct"),
-            usedKwh = json.getDouble("usedKwh"),
-            chargedPct = json.getDouble("chargedPct"),
-            plannedKwh = json.getDouble("plannedKwh"),
-            plannedEndSocPct = json.getDouble("plannedEndSocPct"),
-        )
+    fun loadRecords(): List<DriveRecord> {
+        val list = prefs.getString(KEY_RECORDS, null)?.let(::JSONArray) ?: return emptyList()
+        return List(list.length()) { index ->
+            val json = list.getJSONObject(index)
+            DriveRecord(
+                name = json.getString("name"),
+                km = json.getDouble("km"),
+                minutes = json.getDouble("minutes"),
+                startSocPct = json.getDouble("startSocPct"),
+                endSocPct = json.getDouble("endSocPct"),
+                usedKwh = json.getDouble("usedKwh"),
+                chargedPct = json.getDouble("chargedPct"),
+                plannedKwh = json.getDouble("plannedKwh"),
+                plannedEndSocPct = json.getDouble("plannedEndSocPct"),
+                epochDay = json.optLong("epochDay"),
+            )
+        }
     }
 
-    fun save(record: DriveRecord) {
-        val json = JSONObject()
-            .put("name", record.name)
-            .put("km", record.km)
-            .put("minutes", record.minutes)
-            .put("startSocPct", record.startSocPct)
-            .put("endSocPct", record.endSocPct)
-            .put("usedKwh", record.usedKwh)
-            .put("chargedPct", record.chargedPct)
-            .put("plannedKwh", record.plannedKwh)
-            .put("plannedEndSocPct", record.plannedEndSocPct)
-        prefs.edit().putString(KEY_RECORD, json.toString()).apply()
+    // 최근 기록이 앞 / Newest first
+    fun add(record: DriveRecord) {
+        val records = (listOf(record) + loadRecords()).take(MAX_RECORDS)
+        val list = JSONArray(
+            records.map {
+                JSONObject()
+                    .put("name", it.name)
+                    .put("km", it.km)
+                    .put("minutes", it.minutes)
+                    .put("startSocPct", it.startSocPct)
+                    .put("endSocPct", it.endSocPct)
+                    .put("usedKwh", it.usedKwh)
+                    .put("chargedPct", it.chargedPct)
+                    .put("plannedKwh", it.plannedKwh)
+                    .put("plannedEndSocPct", it.plannedEndSocPct)
+                    .put("epochDay", it.epochDay)
+            },
+        )
+        prefs.edit().putString(KEY_RECORDS, list.toString()).apply()
     }
 
     private companion object {
@@ -143,6 +178,7 @@ class AppStore(context: Context) {
         const val KEY_EXTRA_DAY = "extra_day"
         const val KEY_EXTRA_KM = "extra_km"
         const val KEY_EFFICIENCY = "efficiency_factor"
-        const val KEY_RECORD = "last_record"
+        const val KEY_RECORDS = "records"
+        const val MAX_RECORDS = 20
     }
 }

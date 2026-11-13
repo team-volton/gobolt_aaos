@@ -109,6 +109,7 @@ fun TripInputScreen(
                         viewModel.shiftDepartTime(it * 30)
                     }
                     Stepper("숙박", "${trip.nights.size}박") { viewModel.setNightCount(trip.nights.size + it) }
+                    Stepper("예상 기온", "${trip.outsideC}°C") { viewModel.shiftOutsideTemp(it) }
                 }
                 Column(
                     verticalArrangement = Arrangement.spacedBy(CardGap),

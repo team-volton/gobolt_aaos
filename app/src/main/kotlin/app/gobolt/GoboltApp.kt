@@ -54,8 +54,8 @@ fun GoboltApp(viewModel: GoboltViewModel) {
             .fillMaxSize()
             .safeDrawingPadding()
             .padding(ScreenPadding)
-        val vehicle by viewModel.vehicleState.collectAsStateWithLifecycle()
-        val locked = vehicle.driving && stack.last() in INPUT_SCREENS
+        val inputLocked by viewModel.inputLocked.collectAsStateWithLifecycle()
+        val locked = inputLocked && stack.last() in INPUT_SCREENS
         if (locked) {
             DriveLock(onBack = ::back, modifier = content)
         } else when (stack.last()) {

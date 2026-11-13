@@ -30,6 +30,8 @@ data class Trip(
     val nights: List<Stay> = List(3) { Stay.LODGING },
     // 목적지를 고를 때의 위치 / Where the car was when the destination was chosen
     val origin: NaviPlace? = null,
+    val outsideC: Int = 5,
+    val cabinC: Int = 20,
 ) {
     val startDate: LocalDate get() = LocalDate.ofEpochDay(startEpochDay)
 
@@ -86,16 +88,17 @@ object TripSchedule {
     fun build(trip: Trip, startSocPct: Double, legs: TripLegs, settings: AppSettings, fromDay: Int = 0): Schedule {
         val slow = ChargingSite(slow = ChargingPlace("숙소 완속", 7.0, targetPct = 90.0))
         val lastDay = trip.nights.size
+        val temp = trip.outsideC.toDouble()
         val days = (fromDay.coerceIn(0, lastDay)..lastDay).map { day ->
             val label = trip.dateOf(day).label()
             val activities = when (day) {
-                0 -> listOf(Activity.Drive("${trip.destination.name}까지", legs.outKm, chargers = legs.outChargers))
-                lastDay -> listOf(Activity.Drive("집으로", legs.backKm, chargers = legs.backChargers))
-                else -> listOf(Activity.Local("현지 이동", km = trip.localKm[day - 1].toDouble()))
+                0 -> listOf(Activity.Drive("${trip.destination.name}까지", legs.outKm, tempC = temp, chargers = legs.outChargers))
+                lastDay -> listOf(Activity.Drive("집으로", legs.backKm, tempC = temp, chargers = legs.backChargers))
+                else -> listOf(Activity.Local("현지 이동", km = trip.localKm[day - 1].toDouble(), tempC = temp))
             }
             val night = when {
                 day == lastDay -> Night.Lodging(homeSite(settings))
-                trip.nights[day] == Stay.CAR_CAMP -> Night.CarCamp()
+                trip.nights[day] == Stay.CAR_CAMP -> Night.CarCamp(outsideC = temp, cabinC = trip.cabinC.toDouble())
                 else -> Night.Lodging(slow)
             }
             Day(label, activities, night)

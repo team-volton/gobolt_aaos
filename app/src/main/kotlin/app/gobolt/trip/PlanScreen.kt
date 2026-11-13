@@ -105,6 +105,15 @@ fun PlanScreen(
                 before = before,
                 after = plan,
             )
+            val changed by viewModel.hasChanges.collectAsStateWithLifecycle()
+            if (changed) {
+                ChangeCard(
+                    before = viewModel.planBeforeChanges(strategy),
+                    after = plan,
+                    onUndo = viewModel::undoChanges,
+                    onKeep = viewModel::keepChanges,
+                )
+            }
             Spacer(Modifier.weight(1f))
             PrimaryButton(
                 "이 계획으로 시작",
@@ -207,6 +216,23 @@ private fun StrategyCard(plan: Plan, selected: Boolean, onClick: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = GoboltTheme.energy.warning,
             )
+        }
+    }
+}
+
+@Composable
+private fun ChangeCard(before: Plan?, after: Plan, onUndo: () -> Unit, onKeep: () -> Unit) {
+    fun describe(plan: Plan?) = when {
+        plan == null -> "--"
+        !plan.isFeasible -> "어려움"
+        else -> "충전 ${plan.stops.size}회 · 도착 ${pct(plan.summary.endSocPct)}"
+    }
+    GoCard(Modifier.fillMaxWidth()) {
+        Text("변경 전 → 지금", style = MaterialTheme.typography.bodyMedium, color = secondaryText())
+        Text("${describe(before)} → ${describe(after)}", style = MaterialTheme.typography.titleLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SecondaryButton("되돌리기", onUndo, Modifier.weight(1f))
+            SecondaryButton("유지", onKeep, Modifier.weight(1f))
         }
     }
 }

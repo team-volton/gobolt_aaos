@@ -7,6 +7,7 @@ import app.gobolt.data.AppSettings
 import app.gobolt.data.AppStore
 import app.gobolt.data.ORIGIN_NAME
 import app.gobolt.data.DriveRecord
+import app.gobolt.data.EfficiencyMode
 import app.gobolt.demo.DemoTrip
 import app.gobolt.data.Stay
 import app.gobolt.data.Trip
@@ -31,6 +32,8 @@ import app.gobolt.navi.NaviGateway
 import app.gobolt.engine.Charger
 import app.gobolt.navi.LiveLeg
 import app.gobolt.navi.NaviPlace
+import app.gobolt.engine.HvacPowerModel
+import app.gobolt.vehicle.UxRestrictionGateway
 import app.gobolt.vehicle.VehicleGateway
 import java.time.LocalDate
 import kotlin.math.roundToInt
@@ -53,6 +56,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     private val store = AppStore(application)
     private val car = VehicleGateway(application)
     private val navi = NaviGateway(application)
+    private val ux = UxRestrictionGateway(application)
     private val calibrator = Calibrator()
 
     val vehicleState = car.state
@@ -63,8 +67,8 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
 
     private val efficiencyFactor = MutableStateFlow(store.loadEfficiencyFactor())
 
-    private val _record = MutableStateFlow(store.loadRecord())
-    val record: StateFlow<DriveRecord?> = _record.asStateFlow()
+    private val _records = MutableStateFlow(store.loadRecords())
+    val records: StateFlow<List<DriveRecord>> = _records.asStateFlow()
 
     private val _trip = MutableStateFlow(store.loadTrip())
     val trip: StateFlow<Trip> = _trip.asStateFlow()
@@ -85,7 +89,18 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
 
     private val carSpec = car.state.map { it.capacityKwh to it.efficiencyKmPerKwh }.distinctUntilChanged()
 
-    private val model: Flow<Vehicle> = combine(efficiencyFactor, carSpec) { factor, _ -> vehicleWith(factor) }
+    private val model: Flow<Vehicle> = combine(efficiencyFactor, carSpec, _settings) { factor, _, _ -> vehicleWith(factor) }
+
+    // 기어 또는 차량의 화면 제한 중 하나라도 걸리면 잠금 / Locks when either the gear or the car restricts the screen
+    val inputLocked: StateFlow<Boolean> = combine(car.state, ux.restricted) { state, restricted ->
+        state.driving || restricted
+    }.stateInUi(false)
+
+    // 변경 전 상태 / The state before the latest edits
+    private data class Snapshot(val trip: Trip, val settings: AppSettings)
+
+    private val _undo = MutableStateFlow<Snapshot?>(null)
+    val hasChanges: StateFlow<Boolean> = _undo.map { it != null }.stateInUi(false)
 
     private val planner: Flow<Planner> = combine(model, _settings) { vehicle, settings ->
         Planner(vehicle, settings.toConfig())
@@ -105,6 +120,16 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
 
     val weekPlan: StateFlow<Plan?> = combine(planner, startSoc, _settings, extraTodayKm) { planner, soc, settings, extra ->
         planner.plan(DemoTrip.week(soc, todayIndex, settings, extra))
+    }.stateInUi(null)
+
+    // 공용 충전기가 차 있을 때의 다음 충전일 / The next charging night if the shared charger is taken
+    val sharedFallback: StateFlow<String?> = combine(planner, startSoc, _settings, extraTodayKm, weekPlan) { planner, soc, settings, extra, week ->
+        val night = week?.stops?.firstOrNull { !it.fast }?.dayIndex ?: return@combine null
+        if (settings.homeCharge != app.gobolt.data.HomeCharge.SHARED) return@combine null
+        val fallback = planner.plan(DemoTrip.week(soc, todayIndex, settings, extra, blockedNight = night))
+        if (!fallback.isFeasible) return@combine "못 쓰면 급속 충전이 필요해요"
+        val next = fallback.stops.firstOrNull { !it.fast && it.dayIndex != night } ?: return@combine null
+        "못 쓰면 ${weekLabels[next.dayIndex]}요일 밤"
     }.stateInUi(null)
 
     val selectedPlan: StateFlow<Plan?> = combine(plans, _strategy) { plans, strategy ->
@@ -127,6 +152,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     init {
         car.start(viewModelScope)
         navi.start()
+        ux.start()
         car.state.onEach { state ->
             val soc = state.socPct?.toDouble() ?: return@onEach
             session?.let { active ->
@@ -190,7 +216,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
             name = found.name,
             positionKm = found.positionKm,
             // 출력을 모르면 보수적으로 가정 / Assumes a conservative power when unknown
-            powerKw = known?.powerKw ?: UNKNOWN_CHARGER_KW,
+            powerKw = navi.state.value.chargerKw[found.name]?.toDouble() ?: known?.powerKw ?: UNKNOWN_CHARGER_KW,
         )
     }
 
@@ -287,6 +313,8 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setNightCount(count: Int) = updateTrip { it.withNightCount(count) }
 
+    fun shiftOutsideTemp(delta: Int) = updateTrip { it.copy(outsideC = (it.outsideC + delta).coerceIn(-20, 40)) }
+
     fun vehicleSummary(): String {
         val state = car.state.value
         val vehicle = vehicleWith(efficiencyFactor.value)
@@ -302,6 +330,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun updateSettings(change: (AppSettings) -> AppSettings) {
+        remember()
         _settings.update(change)
         store.save(_settings.value)
     }
@@ -314,7 +343,34 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         input.copy(nights = input.nights.mapIndexed { i, old -> if (i == night) stay else old })
     }
 
+    private fun remember() {
+        if (_undo.value == null) _undo.value = Snapshot(_trip.value, _settings.value)
+    }
+
+    fun undoChanges() {
+        val before = _undo.value ?: return
+        _trip.value = before.trip
+        _settings.value = before.settings
+        store.save(before.trip)
+        store.save(before.settings)
+        _undo.value = null
+    }
+
+    fun keepChanges() {
+        _undo.value = null
+    }
+
+    // 변경 전 일정으로 같은 전략의 계획 / The same strategy planned on the pre-edit state
+    fun planBeforeChanges(strategy: Strategy): Plan? {
+        val before = _undo.value ?: return null
+        val soc = (car.state.value.socPct ?: DEFAULT_SOC_PCT).toDouble()
+        val planner = Planner(vehicleWith(efficiencyFactor.value, before.settings), before.settings.toConfig())
+        val schedule = TripSchedule.build(before.trip, soc, legs(before.trip), before.settings, dayOffset(before.trip))
+        return planner.plan(schedule, strategy, _excludedChargers.value)
+    }
+
     private fun updateTrip(change: (Trip) -> Trip) {
+        remember()
         _trip.update(change)
         store.save(_trip.value)
     }
@@ -390,9 +446,10 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
             chargedPct = active.chargedPct,
             plannedKwh = active.plannedKwh,
             plannedEndSocPct = active.plannedEndSoc,
+            epochDay = today.toEpochDay(),
         )
-        store.save(record)
-        _record.value = record
+        store.add(record)
+        _records.value = store.loadRecords()
 
         val calibrated = calibrator.afterTrip(vehicle, km, usedPct, RoadType.HIGHWAY, null)
         efficiencyFactor.value = calibrated.calibration.efficiencyFactor
@@ -406,12 +463,16 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     override fun onCleared() {
         navi.stop()
         car.stop()
+        ux.stop()
     }
 
     // 차량이 준 용량과 전비를 쓰고, 없으면 기본값 / Uses the car's capacity and efficiency, else defaults
-    private fun vehicleWith(factor: Double): Vehicle {
+    private fun vehicleWith(factor: Double, settings: AppSettings = _settings.value): Vehicle {
         val state = car.state.value
-        val base = Vehicle.ioniq9Demo()
+        val base = when (settings.efficiencyMode) {
+            EfficiencyMode.DEMO -> Vehicle.ioniq9Demo()
+            EfficiencyMode.RATED -> Vehicle.ioniq9Rated().copy(hvac = TEMPERATURE_HVAC)
+        }
         // SDK 값은 환경에 따라 Wh로 올 수 있음 / The SDK value may arrive in watt-hours
         val capacity = state.capacityKwh?.toDouble()
             ?.let { if (it > WH_THRESHOLD) it / 1000 else it }
@@ -439,6 +500,10 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         const val UNKNOWN_CHARGER_KW = 100.0
         const val BACK_SUFFIX = "-back"
         const val NEAR_DESTINATION_KM = 30.0
+
+        // 기획서 예시(외부 5°C, 실내 20°C에서 1.25kW)를 지나도록 맞춘 가정
+        // Assumption tuned to pass the plan's example (1.25kW at 5°C outside, 20°C cabin)
+        val TEMPERATURE_HVAC = HvacPowerModel.byTemperatureGap(baseKw = 0.3, kwPerDegree = 0.063, referenceKw = 1.25)
         const val MINUTES_PER_DAY = 24 * 60
         const val MIN_CAPACITY_KWH = 10.0
         const val MAX_CAPACITY_KWH = 200.0
