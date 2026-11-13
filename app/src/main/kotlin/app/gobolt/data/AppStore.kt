@@ -88,12 +88,22 @@ class AppStore(context: Context) {
         return try {
             val km = json.getJSONArray("localKm")
             val nights = json.getJSONArray("nights")
+            fun ints(key: String) = json.optJSONArray(key)?.let { list -> List(list.length(), list::getInt) }
             Trip(
                 destination = NaviPlace(json.getString("name"), json.getDouble("lat"), json.getDouble("lon")),
                 startEpochDay = json.getLong("startEpochDay"),
                 departMinutes = json.getInt("departMinutes"),
                 localKm = List(km.length(), km::getInt),
                 nights = List(nights.length()) { Stay.valueOf(nights.getString(it)) },
+                localHours = ints("localHours") ?: List(km.length()) { 0 },
+                waitHours = ints("waitHours") ?: List(km.length()) { 0 },
+                dayTemps = ints("dayTemps") ?: emptyList(),
+                outsideC = json.optInt("outsideC", 5),
+                waypoint = if (json.has("wpName")) {
+                    NaviPlace(json.getString("wpName"), json.getDouble("wpLat"), json.getDouble("wpLon"))
+                } else {
+                    null
+                },
                 origin = if (json.has("originLat")) {
                     NaviPlace(ORIGIN_NAME, json.getDouble("originLat"), json.getDouble("originLon"))
                 } else {
@@ -115,15 +125,37 @@ class AppStore(context: Context) {
             .put("localKm", JSONArray(trip.localKm))
             .put("nights", JSONArray(trip.nights.map { it.name }))
         trip.origin?.let { json.put("originLat", it.latitude).put("originLon", it.longitude) }
+        trip.waypoint?.let { json.put("wpName", it.name).put("wpLat", it.latitude).put("wpLon", it.longitude) }
+        json.put("localHours", JSONArray(trip.localHours))
+            .put("waitHours", JSONArray(trip.waitHours))
+            .put("dayTemps", JSONArray(trip.dayTemps))
+            .put("outsideC", trip.outsideC)
         prefs.edit().putString(KEY_TRIP, json.toString()).apply()
     }
 
-    // 오늘 날짜에만 유효 / Valid only for today
-    fun loadExtraKm(epochDay: Long): Int =
-        if (prefs.getLong(KEY_EXTRA_DAY, -1) == epochDay) prefs.getInt(KEY_EXTRA_KM, 0) else 0
+    // 날짜별 외근 거리 / Extra field trip distance by date
+    fun loadExtraKm(): Map<Long, Int> {
+        val json = prefs.getString(KEY_EXTRA, null)?.let(::JSONObject) ?: return emptyMap()
+        return json.keys().asSequence().associate { it.toLong() to json.getInt(it) }
+    }
 
-    fun saveExtraKm(epochDay: Long, km: Int) {
-        prefs.edit().putLong(KEY_EXTRA_DAY, epochDay).putInt(KEY_EXTRA_KM, km).apply()
+    fun saveExtraKm(extra: Map<Long, Int>) {
+        val json = JSONObject()
+        extra.forEach { (day, km) -> json.put(day.toString(), km) }
+        prefs.edit().putString(KEY_EXTRA, json.toString()).apply()
+    }
+
+    fun loadFastChargeKw(): Double? = prefs.getFloat(KEY_FAST_KW, 0f).toDouble().takeIf { it > 0 }
+
+    fun saveFastChargeKw(kw: Double) {
+        prefs.edit().putFloat(KEY_FAST_KW, kw.toFloat()).apply()
+    }
+
+    // 같은 알림을 하루 한 번만 / Shows the same notice once a day
+    fun notifiedOn(key: String): Long = prefs.getLong("notified_$key", -1)
+
+    fun markNotified(key: String, epochDay: Long) {
+        prefs.edit().putLong("notified_$key", epochDay).apply()
     }
 
     fun loadEfficiencyFactor(): Double = prefs.getFloat(KEY_EFFICIENCY, 1f).toDouble()
@@ -175,8 +207,8 @@ class AppStore(context: Context) {
     private companion object {
         const val KEY_SETTINGS = "settings"
         const val KEY_TRIP = "trip_v2"
-        const val KEY_EXTRA_DAY = "extra_day"
-        const val KEY_EXTRA_KM = "extra_km"
+        const val KEY_EXTRA = "extra_map"
+        const val KEY_FAST_KW = "fast_charge_kw"
         const val KEY_EFFICIENCY = "efficiency_factor"
         const val KEY_RECORDS = "records"
         const val MAX_RECORDS = 20

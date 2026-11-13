@@ -49,7 +49,8 @@ object DemoTrip {
         startSocPct: Double,
         todayIndex: Int,
         settings: AppSettings,
-        extraTodayKm: Int = 0,
+        // 오늘부터 며칠째인지 → 거리 / Days from today to distance
+        extraKm: Map<Int, Int> = emptyMap(),
         blockedNight: Int? = null,
     ): Schedule {
         val commute = Activity.Local("출퇴근", km = settings.commuteKm.toDouble())
@@ -62,7 +63,7 @@ object DemoTrip {
             days = List(7) { offset ->
                 val weekday = (todayIndex + offset) % 7
                 val usual = if (weekday in settings.commuteDays) listOf(commute) else emptyList()
-                val extra = if (offset == 0 && extraTodayKm > 0) listOf(Activity.Local("외근", km = extraTodayKm.toDouble())) else emptyList()
+                val extra = extraKm[offset]?.takeIf { it > 0 }?.let { listOf(Activity.Local("외근", km = it.toDouble())) } ?: emptyList()
                 val routines = settings.routines.filter { it.weekday == weekday }.map { Activity.Local(it.label, km = it.km.toDouble()) }
                 Day(weekdays[weekday], usual + routines + extra, Night.Lodging(if (offset == blockedNight) ChargingSite() else site))
             },

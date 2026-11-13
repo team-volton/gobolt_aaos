@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,26 +27,38 @@ import app.gobolt.ui.secondaryText
 
 private val DISTANCES = listOf(30, 60, 90, 120)
 private const val MAX_PLACES = 3
+private const val DAYS_AHEAD = 7
 
 @Composable
 fun FieldTripDialog(
-    preview: (Int) -> FieldTripPreview?,
+    preview: (Int, Int) -> FieldTripPreview?,
     places: List<NaviPlace>,
     kmFor: (NaviPlace) -> Int,
-    onApply: (Int) -> Unit,
+    dayLabels: List<String>,
+    onApply: (Int, Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var km by remember { mutableStateOf<Int?>(null) }
-    val result = km?.let(preview)
+    var day by remember { mutableStateOf(0) }
+    val result = km?.let { preview(it, day) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.widthIn(min = 760.dp),
         confirmButton = {},
-        title = { Text("오늘 외근 추가", style = MaterialTheme.typography.headlineLarge) },
+        title = { Text("외근 추가", style = MaterialTheme.typography.headlineLarge) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.fillMaxWidth()) {
                 if (result == null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        dayLabels.take(DAYS_AHEAD).forEachIndexed { index, label ->
+                            FilterChip(
+                                selected = index == day,
+                                onClick = { day = index },
+                                label = { Text(if (index == 0) "오늘" else label, style = MaterialTheme.typography.titleLarge) },
+                            )
+                        }
+                    }
                     if (places.isNotEmpty()) {
                         Text("장소를 고르거나", style = MaterialTheme.typography.titleLarge, color = secondaryText())
                         places.take(MAX_PLACES).forEach { place ->
@@ -73,7 +86,7 @@ fun FieldTripDialog(
                         Metric(pct(result.beforePct), "외근 전 귀가 잔량")
                         Metric(pct(result.afterPct), "외근 후 귀가 잔량")
                     }
-                    PrimaryButton("충전 일정 반영", { onApply(km!!) }, Modifier.fillMaxWidth())
+                    PrimaryButton("충전 일정 반영", { onApply(km!!, day) }, Modifier.fillMaxWidth())
                     SecondaryButton("취소", onDismiss, Modifier.fillMaxWidth())
                 }
             }

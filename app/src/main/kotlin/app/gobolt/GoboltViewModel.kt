@@ -29,6 +29,7 @@ import app.gobolt.engine.Strategy
 import app.gobolt.engine.Vehicle
 import app.gobolt.engine.checkWhileDriving
 import app.gobolt.navi.NaviGateway
+import app.gobolt.notify.Notifier
 import app.gobolt.engine.Charger
 import app.gobolt.navi.LiveLeg
 import app.gobolt.navi.NaviPlace
@@ -57,6 +58,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     private val car = VehicleGateway(application)
     private val navi = NaviGateway(application)
     private val ux = UxRestrictionGateway(application)
+    private val notifier = Notifier(application)
     private val calibrator = Calibrator()
 
     val vehicleState = car.state
@@ -66,6 +68,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
     private val efficiencyFactor = MutableStateFlow(store.loadEfficiencyFactor())
+    private val fastChargeKw = MutableStateFlow(store.loadFastChargeKw())
 
     private val _records = MutableStateFlow(store.loadRecords())
     val records: StateFlow<List<DriveRecord>> = _records.asStateFlow()
@@ -89,7 +92,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
 
     private val carSpec = car.state.map { it.capacityKwh to it.efficiencyKmPerKwh }.distinctUntilChanged()
 
-    private val model: Flow<Vehicle> = combine(efficiencyFactor, carSpec, _settings) { factor, _, _ -> vehicleWith(factor) }
+    private val model: Flow<Vehicle> = combine(efficiencyFactor, carSpec, _settings, fastChargeKw) { factor, _, _, _ -> vehicleWith(factor) }
 
     // 기어 또는 차량의 화면 제한 중 하나라도 걸리면 잠금 / Locks when either the gear or the car restricts the screen
     val inputLocked: StateFlow<Boolean> = combine(car.state, ux.restricted) { state, restricted ->
@@ -116,17 +119,21 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         planner.planAll(scheduleFor(soc, lodging), excluded)
     }.stateInUi(emptyList())
 
-    private val extraTodayKm = MutableStateFlow(store.loadExtraKm(today.toEpochDay()))
+    private val extraKm = MutableStateFlow(store.loadExtraKm())
 
-    val weekPlan: StateFlow<Plan?> = combine(planner, startSoc, _settings, extraTodayKm) { planner, soc, settings, extra ->
-        planner.plan(DemoTrip.week(soc, todayIndex, settings, extra))
+    private fun byOffset(extra: Map<Long, Int>): Map<Int, Int> = extra.mapNotNull { (day, km) ->
+        (day - today.toEpochDay()).toInt().takeIf { it in 0 until WEEK_DAYS }?.let { it to km }
+    }.toMap()
+
+    val weekPlan: StateFlow<Plan?> = combine(planner, startSoc, _settings, extraKm) { planner, soc, settings, extra ->
+        planner.plan(DemoTrip.week(soc, todayIndex, settings, byOffset(extra)))
     }.stateInUi(null)
 
     // 공용 충전기가 차 있을 때의 다음 충전일 / The next charging night if the shared charger is taken
-    val sharedFallback: StateFlow<String?> = combine(planner, startSoc, _settings, extraTodayKm, weekPlan) { planner, soc, settings, extra, week ->
+    val sharedFallback: StateFlow<String?> = combine(planner, startSoc, _settings, extraKm, weekPlan) { planner, soc, settings, extra, week ->
         val night = week?.stops?.firstOrNull { !it.fast }?.dayIndex ?: return@combine null
         if (settings.homeCharge != app.gobolt.data.HomeCharge.SHARED) return@combine null
-        val fallback = planner.plan(DemoTrip.week(soc, todayIndex, settings, extra, blockedNight = night))
+        val fallback = planner.plan(DemoTrip.week(soc, todayIndex, settings, byOffset(extra), blockedNight = night))
         if (!fallback.isFeasible) return@combine "못 쓰면 급속 충전이 필요해요"
         val next = fallback.stops.firstOrNull { !it.fast && it.dayIndex != night } ?: return@combine null
         "못 쓰면 ${weekLabels[next.dayIndex]}요일 밤"
@@ -147,7 +154,13 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         val plannedEndSoc: Double,
         var lastSoc: Double,
         var chargedPct: Double = 0.0,
+        var chargeStartAt: Long? = null,
+        var chargeStartSoc: Double = 0.0,
+        var lastRiseAt: Long = 0,
     )
+
+    private val _approaching = MutableStateFlow<String?>(null)
+    val approaching: StateFlow<String?> = _approaching.asStateFlow()
 
     init {
         car.start(viewModelScope)
@@ -157,9 +170,39 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
             val soc = state.socPct?.toDouble() ?: return@onEach
             session?.let { active ->
                 // 잔량이 오른 만큼은 충전분 / Any rise in SOC counts as charging
-                if (soc > active.lastSoc) active.chargedPct += soc - active.lastSoc
+                if (soc > active.lastSoc) {
+                    active.chargedPct += soc - active.lastSoc
+                    if (active.chargeStartAt == null) {
+                        active.chargeStartAt = System.currentTimeMillis()
+                        active.chargeStartSoc = active.lastSoc
+                    }
+                    active.lastRiseAt = System.currentTimeMillis()
+                } else if (soc < active.lastSoc) {
+                    learnCharge(active)
+                }
                 active.lastSoc = soc
             }
+        }.launchIn(viewModelScope)
+        weekPlan.onEach { week ->
+            val tonight = week?.stops?.firstOrNull { !it.fast && it.dayIndex == 0 } ?: return@onEach
+            if (store.notifiedOn(KEY_TONIGHT) == today.toEpochDay()) return@onEach
+            store.markNotified(KEY_TONIGHT, today.toEpochDay())
+            notifier.show(
+                Notifier.ID_TONIGHT,
+                "오늘 밤 완속 충전",
+                "${tonight.fromPct.roundToInt()}% → ${tonight.toPct.roundToInt()}%, 약 ${(tonight.minutes / 60).roundToInt()}시간",
+            )
+        }.launchIn(viewModelScope)
+        // 충전소에 가까워지면 상태 확인 안내 / Prompts a status check when nearing a charger
+        navi.state.map { it.nextStop }.distinctUntilChanged().onEach { leg ->
+            if (leg == null || !leg.isCharger || leg.remainKm > APPROACH_KM) return@onEach
+            if (_approaching.value == leg.name) return@onEach
+            _approaching.value = leg.name
+            notifier.show(
+                Notifier.ID_APPROACH,
+                "곧 ${leg.name}",
+                "${leg.remainKm.roundToInt()}km 남았어요. 충전기를 못 쓰면 고볼트에서 바꿀 수 있어요",
+            )
         }.launchIn(viewModelScope)
         navi.state.map { it.arrivedKm }.distinctUntilChanged().onEach { km ->
             if (km != null) finishDrive(km)
@@ -171,14 +214,16 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         return vehicle.kwhOf(socPct.toDouble()) * vehicle.kmPerKwh(RoadType.MIXED, null)
     }
 
-    fun previewFieldTrip(km: Int): FieldTripPreview? {
+    fun previewFieldTrip(km: Int, day: Int = 0): FieldTripPreview? {
         val soc = car.state.value.socPct?.toDouble() ?: return null
         val settings = _settings.value
         val planner = Planner(vehicleWith(efficiencyFactor.value), settings.toConfig())
-        val before = planner.plan(DemoTrip.week(soc, todayIndex, settings, extraTodayKm.value))
-        val after = planner.plan(DemoTrip.week(soc, todayIndex, settings, extraTodayKm.value + km))
+        val current = extraKm.value
+        val key = today.toEpochDay() + day
+        val before = planner.plan(DemoTrip.week(soc, todayIndex, settings, byOffset(current)))
+        val after = planner.plan(DemoTrip.week(soc, todayIndex, settings, byOffset(current + (key to (current[key] ?: 0) + km))))
         fun home(plan: Plan) = plan.events
-            .lastOrNull { it.dayIndex == 0 && it.kind !in CHARGE_KINDS }?.toPct ?: soc
+            .lastOrNull { it.dayIndex == day && it.kind !in CHARGE_KINDS }?.toPct ?: soc
         return FieldTripPreview(home(before), home(after), after.isFeasible && home(after) >= settings.floorPct)
     }
 
@@ -187,9 +232,43 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         return (TripSchedule.estimateKm(here, place) * 2).roundToInt()
     }
 
-    fun applyFieldTrip(km: Int) {
-        extraTodayKm.update { it + km }
-        store.saveExtraKm(today.toEpochDay(), extraTodayKm.value)
+    fun applyFieldTrip(km: Int, day: Int = 0) {
+        val key = today.toEpochDay() + day
+        extraKm.update { it + (key to (it[key] ?: 0) + km) }
+        store.saveExtraKm(extraKm.value.filterKeys { it >= today.toEpochDay() })
+    }
+
+    // 급속 충전 기록으로 평균 전력 학습 / Learns the average fast charging power from a session
+    private fun learnCharge(active: DriveSession) {
+        val start = active.chargeStartAt ?: return
+        active.chargeStartAt = null
+        val minutes = (active.lastRiseAt - start) / 60_000.0
+        val added = active.lastSoc - active.chargeStartSoc
+        if (minutes < MIN_CHARGE_MINUTES) return
+        val learned = calibrator.afterFastCharge(vehicleWith(efficiencyFactor.value), minutes, added)
+        learned.calibration.fastChargeKw?.let {
+            fastChargeKw.value = it
+            store.saveFastChargeKw(it)
+        }
+    }
+
+    fun dismissApproach() {
+        _approaching.value = null
+    }
+
+    // 이번 여행 기간의 운행 합계 / Totals for drives during this trip
+    fun tripTotals(): Triple<Int, Double, Double>? {
+        val trip = _trip.value
+        val days = trip.startEpochDay..(trip.startEpochDay + trip.nights.size)
+        val inTrip = _records.value.filter { it.epochDay in days }
+        if (inTrip.isEmpty()) return null
+        return Triple(inTrip.size, inTrip.sumOf { it.km }, inTrip.sumOf { it.usedKwh })
+    }
+
+    fun powerKnown(chargerId: String?): Boolean {
+        if (chargerId == null || DemoTrip.placeOf(chargerId) != null) return true
+        val name = navi.state.value.tripChargers.firstOrNull { NAVI_PREFIX + it.name == chargerId.removeSuffix(BACK_SUFFIX) }?.name
+        return name != null && navi.state.value.chargerKw.containsKey(name)
     }
 
     // 다음 급속 충전소를 빼고 내비 경로를 다시 보냄 / Drops the next fast charger and resends the route
@@ -227,8 +306,13 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         // 목적지에 도착한 뒤에는 복귀 구간을 내비로 잴 수 있음 / Once at the destination, the navi can measure the way back
         val backKm = state.tripKm?.takeIf { state.tripFor == ORIGIN_NAME }
         val origin = originOf(trip)
-        val outKm = measuredKm ?: TripSchedule.estimateKm(origin, trip.destination)
-        val fromNavi = if (measuredKm != null || backKm != null) naviChargers() else emptyList()
+        val wp = trip.waypoint
+        // 경유지가 있으면 내비 실측(경유지 없음)을 쓸 수 없음 / The navi estimate has no waypoint, so it can't be used with one
+        val outKm = when {
+            wp != null -> TripSchedule.estimateKm(origin, wp) + TripSchedule.estimateKm(wp, trip.destination)
+            else -> measuredKm ?: TripSchedule.estimateKm(origin, trip.destination)
+        }
+        val fromNavi = if (wp == null && (measuredKm != null || backKm != null)) naviChargers() else emptyList()
         val demoRoute = trip.destination.name == DemoTrip.busan.name
         val out = (if (measuredKm != null) fromNavi else emptyList()).ifEmpty {
             if (demoRoute) DemoTrip.outboundChargers.filter { it.positionKm < outKm } else emptyList()
@@ -240,7 +324,8 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
                 .map { it.copy(id = it.id + BACK_SUFFIX, name = it.name + " (복귀 추정)", positionKm = outKm - it.positionKm) }
                 .sortedBy { it.positionKm }
         }
-        return TripLegs(outKm, backKm ?: outKm, out, back, measuredKm != null, backKm != null)
+        val returnKm = backKm ?: if (wp != null) TripSchedule.estimateKm(trip.destination, origin) else outKm
+        return TripLegs(outKm, returnKm, out, back, wp == null && measuredKm != null, backKm != null)
     }
 
     private fun originOf(trip: Trip): NaviPlace =
@@ -276,11 +361,17 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun sketch(plan: Plan): Pair<List<NaviPlace>, List<NaviPlace>> {
-        val stops = plan.stops.filter { it.dayIndex == 0 && it.fast }.mapNotNull { placeOf(it.chargerId) }.distinct()
+        val lastDay = plan.events.maxOfOrNull { it.dayIndex } ?: 0
+        val outStops = plan.stops.filter { it.dayIndex == 0 && it.fast }.mapNotNull { placeOf(it.chargerId) }
+        // 복귀 구간 충전소도 함께 표시 / Shows the return leg's chargers too
+        val backStops = plan.stops.filter { it.dayIndex == lastDay && lastDay > 0 && it.fast }.mapNotNull { placeOf(it.chargerId) }
+        val stops = (outStops + backStops).distinct()
         val trip = _trip.value
-        if (trip.destination.name == DemoTrip.busan.name && chargerSource == "기본 목록") return DemoTrip.routeLine to stops
-        val origin = navi.state.value.currentLocation ?: DemoTrip.seoul
-        return (listOf(origin) + stops + trip.destination) to stops
+        if (trip.waypoint == null && trip.destination.name == DemoTrip.busan.name && chargerSource == "기본 목록") {
+            return DemoTrip.routeLine to stops
+        }
+        val origin = originOf(trip)
+        return (listOfNotNull(origin, trip.waypoint) + outStops + trip.destination) to stops
     }
 
     // 출발 직전에 내비 값으로 다시 계산 / Recalculates from navi values right before each leg
@@ -313,7 +404,24 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setNightCount(count: Int) = updateTrip { it.withNightCount(count) }
 
-    fun shiftOutsideTemp(delta: Int) = updateTrip { it.copy(outsideC = (it.outsideC + delta).coerceIn(-20, 40)) }
+    fun shiftOutsideTemp(delta: Int) = updateTrip { trip ->
+        trip.copy(
+            outsideC = (trip.outsideC + delta).coerceIn(Trip.MIN_TEMP, Trip.MAX_TEMP),
+            dayTemps = trip.dayTemps.map { (it + delta).coerceIn(Trip.MIN_TEMP, Trip.MAX_TEMP) },
+        )
+    }
+
+    fun setDayTemp(day: Int, value: Int) = updateTrip { it.withTemp(day, value) }
+
+    fun setLocalHours(index: Int, hours: Int) = updateTrip { trip ->
+        trip.copy(localHours = trip.localHours.mapIndexed { i, old -> if (i == index) hours.coerceIn(0, 16) else old })
+    }
+
+    fun setWaitHours(index: Int, hours: Int) = updateTrip { trip ->
+        trip.copy(waitHours = trip.waitHours.mapIndexed { i, old -> if (i == index) hours.coerceIn(0, 24) else old })
+    }
+
+    fun setWaypoint(place: NaviPlace?) = updateTrip { it.copy(waypoint = place) }
 
     fun vehicleSummary(): String {
         val state = car.state.value
@@ -390,9 +498,11 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun startGuidance(plan: Plan) {
-        val waypoints = plan.stops
-            .filter { it.dayIndex == 0 && it.fast }
-            .mapNotNull { placeOf(it.chargerId) }
+        val trip = _trip.value
+        val via = trip.waypoint?.takeIf { !onReturnLeg(trip) }
+        // 내비 경유지는 최대 2곳 / The navi takes at most two waypoints
+        val waypoints = (listOfNotNull(via) + plan.stops.filter { it.dayIndex == 0 && it.fast }.mapNotNull { placeOf(it.chargerId) })
+            .take(MAX_WAYPOINTS)
         val firstDay = plan.events.filter { it.dayIndex == 0 && it.kind == EventKind.DRIVE }
         val state = car.state.value
         val soc = (state.socPct ?: DEFAULT_SOC_PCT).toDouble()
@@ -428,6 +538,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
 
     fun finishDrive(arrivedKm: Double? = null) {
         val active = session ?: return
+        learnCharge(active)
         session = null
         if (arrivedKm == null) navi.cancelRoute()
         val state = car.state.value
@@ -481,7 +592,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         return base.copy(
             capacityKwh = capacity ?: base.capacityKwh,
             efficiency = efficiency?.let { EfficiencyModel.flat(it) } ?: base.efficiency,
-            calibration = Calibration(efficiencyFactor = factor),
+            calibration = Calibration(efficiencyFactor = factor, fastChargeKw = fastChargeKw.value),
         )
     }
 
@@ -500,6 +611,12 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         const val UNKNOWN_CHARGER_KW = 100.0
         const val BACK_SUFFIX = "-back"
         const val NEAR_DESTINATION_KM = 30.0
+        const val WEEK_DAYS = 7
+        const val MAX_WAYPOINTS = 2
+        const val MIN_CHARGE_MINUTES = 5.0
+        // 기획서 6-2의 "김천 지나기 전 확인" 거리 / The plan's "check before Gimcheon" distance
+        const val APPROACH_KM = 35.0
+        const val KEY_TONIGHT = "tonight"
 
         // 기획서 예시(외부 5°C, 실내 20°C에서 1.25kW)를 지나도록 맞춘 가정
         // Assumption tuned to pass the plan's example (1.25kW at 5°C outside, 20°C cabin)

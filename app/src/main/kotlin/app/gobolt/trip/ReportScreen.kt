@@ -54,6 +54,15 @@ fun ReportScreen(viewModel: GoboltViewModel, onDone: () -> Unit, modifier: Modif
                     CompareRow("전기 사용", "${latest.plannedKwh.rounded()}kWh", "${latest.usedKwh.rounded()}kWh")
                     CompareRow("도착 잔량", pct(latest.plannedEndSocPct), pct(latest.endSocPct))
                 }
+                viewModel.tripTotals()?.let { (count, km, kwh) ->
+                    GoCard(Modifier.fillMaxWidth()) {
+                        Text("이번 여행 합계", style = MaterialTheme.typography.headlineMedium)
+                        Text(
+                            "운행 ${count}회 · ${km.rounded()}km · ${kwh.rounded()}kWh",
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    }
+                }
                 if (records.size > 1) {
                     GoCard(Modifier.fillMaxWidth()) {
                         Text("지난 운행", style = MaterialTheme.typography.headlineMedium)

@@ -26,29 +26,50 @@ data class Trip(
     val destination: NaviPlace = DemoTrip.busan,
     val startEpochDay: Long = LocalDate.now().plusDays(1).toEpochDay(),
     val departMinutes: Int = 8 * 60 + 40,
+    // 중간 날마다 하나씩 / One per middle day
     val localKm: List<Int> = listOf(90, 90),
+    // 0이면 거리로 계산 / Zero means use the distance
+    val localHours: List<Int> = listOf(0, 0),
+    val waitHours: List<Int> = listOf(0, 0),
     val nights: List<Stay> = List(3) { Stay.LODGING },
     // 목적지를 고를 때의 위치 / Where the car was when the destination was chosen
     val origin: NaviPlace? = null,
+    // 1일차에 들르는 곳 / A stop on the way out
+    val waypoint: NaviPlace? = null,
     val outsideC: Int = 5,
+    // 날짜별 기온, 비어 있으면 outsideC / Per-day temperatures, else outsideC
+    val dayTemps: List<Int> = emptyList(),
     val cabinC: Int = 20,
 ) {
     val startDate: LocalDate get() = LocalDate.ofEpochDay(startEpochDay)
 
     fun dateOf(day: Int): LocalDate = startDate.plusDays(day.toLong())
 
+    fun tempOf(day: Int): Int = dayTemps.getOrElse(day) { outsideC }
+
     fun withNightCount(count: Int): Trip {
         val n = count.coerceIn(MIN_NIGHTS, MAX_NIGHTS)
         return copy(
             nights = List(n) { nights.getOrElse(it) { Stay.LODGING } },
             localKm = List(n - 1) { localKm.getOrElse(it) { DEFAULT_LOCAL_KM } },
+            localHours = List(n - 1) { localHours.getOrElse(it) { 0 } },
+            waitHours = List(n - 1) { waitHours.getOrElse(it) { 0 } },
+            dayTemps = if (dayTemps.isEmpty()) emptyList() else List(n + 1) { dayTemps.getOrElse(it) { outsideC } },
         )
+    }
+
+    fun withTemp(day: Int, value: Int): Trip {
+        val temps = List(nights.size + 1) { tempOf(it) }.toMutableList()
+        temps[day] = value.coerceIn(MIN_TEMP, MAX_TEMP)
+        return copy(dayTemps = temps)
     }
 
     companion object {
         const val MIN_NIGHTS = 1
         const val MAX_NIGHTS = 6
         const val DEFAULT_LOCAL_KM = 50
+        const val MIN_TEMP = -20
+        const val MAX_TEMP = 40
     }
 }
 
@@ -88,22 +109,36 @@ object TripSchedule {
     fun build(trip: Trip, startSocPct: Double, legs: TripLegs, settings: AppSettings, fromDay: Int = 0): Schedule {
         val slow = ChargingSite(slow = ChargingPlace("숙소 완속", 7.0, targetPct = 90.0))
         val lastDay = trip.nights.size
-        val temp = trip.outsideC.toDouble()
         val days = (fromDay.coerceIn(0, lastDay)..lastDay).map { day ->
-            val label = trip.dateOf(day).label()
+            val temp = trip.tempOf(day).toDouble()
             val activities = when (day) {
                 0 -> listOf(Activity.Drive("${trip.destination.name}까지", legs.outKm, tempC = temp, chargers = legs.outChargers))
                 lastDay -> listOf(Activity.Drive("집으로", legs.backKm, tempC = temp, chargers = legs.backChargers))
-                else -> listOf(Activity.Local("현지 이동", km = trip.localKm[day - 1].toDouble(), tempC = temp))
+                else -> middleDay(trip, day - 1, temp)
             }
             val night = when {
                 day == lastDay -> Night.Lodging(homeSite(settings))
                 trip.nights[day] == Stay.CAR_CAMP -> Night.CarCamp(outsideC = temp, cabinC = trip.cabinC.toDouble())
                 else -> Night.Lodging(slow)
             }
-            Day(label, activities, night)
+            Day(trip.dateOf(day).label(), activities, night)
         }
         return Schedule(startSocPct = startSocPct, days = days)
+    }
+
+    private fun middleDay(trip: Trip, index: Int, temp: Double): List<Activity> {
+        val hours = trip.localHours.getOrElse(index) { 0 }
+        val local = if (hours > 0) {
+            Activity.Local("현지 이동", hours = hours.toDouble(), tempC = temp)
+        } else {
+            Activity.Local("현지 이동", km = trip.localKm[index].toDouble(), tempC = temp)
+        }
+        val wait = trip.waitHours.getOrElse(index) { 0 }
+        return if (wait > 0) {
+            listOf(local, Activity.Waiting("정차 대기", wait.toDouble(), outsideC = temp, cabinC = trip.cabinC.toDouble()))
+        } else {
+            listOf(local)
+        }
     }
 
     private fun homeSite(settings: AppSettings) = when (settings.homeCharge) {

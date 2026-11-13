@@ -30,6 +30,7 @@ import app.gobolt.data.EfficiencyMode
 import app.gobolt.data.HomeCharge
 import app.gobolt.data.Routine
 import app.gobolt.demo.DemoTrip
+import app.gobolt.navi.NaviPlace
 import app.gobolt.ui.CardGap
 import app.gobolt.ui.GoCard
 import app.gobolt.ui.IconTap
@@ -93,7 +94,7 @@ fun SettingsScreen(viewModel: GoboltViewModel, onBack: () -> Unit, modifier: Mod
                             })
                         }
                     }
-                    RoutineAdder { routine -> viewModel.updateSettings { it.copy(routines = it.routines + routine) } }
+                    RoutineAdder(navi.places, viewModel::fieldTripKm) { routine -> viewModel.updateSettings { it.copy(routines = it.routines + routine) } }
                     Text("전비 기준", style = MaterialTheme.typography.titleLarge)
                     SegmentedTabs(
                         options = EfficiencyMode.entries.map { it to it.label },
@@ -128,10 +129,24 @@ fun SettingsScreen(viewModel: GoboltViewModel, onBack: () -> Unit, modifier: Mod
     }
 }
 
+private const val MAX_ROUTINE_PLACES = 3
+
 @Composable
-private fun RoutineAdder(onAdd: (Routine) -> Unit) {
+private fun RoutineAdder(places: List<NaviPlace>, kmFor: (NaviPlace) -> Int, onAdd: (Routine) -> Unit) {
     var weekday by remember { mutableStateOf(3) }
     var km by remember { mutableStateOf(30) }
+    var label by remember { mutableStateOf("약속") }
+    // 장소를 고르면 왕복 거리를 추정 / Picking a place estimates the round trip
+    places.take(MAX_ROUTINE_PLACES).forEach { place ->
+        FilterChip(
+            selected = label == place.name,
+            onClick = {
+                label = place.name
+                km = kmFor(place).coerceAtLeast(10)
+            },
+            label = { Text(place.name, style = MaterialTheme.typography.titleLarge) },
+        )
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         DemoTrip.weekdays.forEachIndexed { index, label ->
             FilterChip(
@@ -142,7 +157,7 @@ private fun RoutineAdder(onAdd: (Routine) -> Unit) {
         }
     }
     Stepper("약속 왕복", "${km}km") { km = (km + it * 10).coerceIn(10, 300) }
-    SecondaryButton("반복 일정 추가", { onAdd(Routine(weekday, km)) }, Modifier.fillMaxWidth())
+    SecondaryButton("반복 일정 추가", { onAdd(Routine(weekday, km, label)) }, Modifier.fillMaxWidth())
 }
 
 @Composable

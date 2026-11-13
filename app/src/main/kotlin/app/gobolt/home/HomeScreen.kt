@@ -81,8 +81,9 @@ fun HomeScreen(
             preview = viewModel::previewFieldTrip,
             places = navi.places,
             kmFor = viewModel::fieldTripKm,
-            onApply = {
-                viewModel.applyFieldTrip(it)
+            dayLabels = viewModel.weekLabels,
+            onApply = { km, day ->
+                viewModel.applyFieldTrip(km, day)
                 fieldTrip = false
             },
             onDismiss = { fieldTrip = false },

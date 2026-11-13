@@ -58,6 +58,7 @@ fun DrivingScreen(viewModel: GoboltViewModel, onFinish: () -> Unit, modifier: Mo
     val selected by viewModel.selectedPlan.collectAsStateWithLifecycle()
     val navi by viewModel.naviState.collectAsStateWithLifecycle()
     val locked by viewModel.inputLocked.collectAsStateWithLifecycle()
+    val approaching by viewModel.approaching.collectAsStateWithLifecycle()
     var replaced by remember { mutableStateOf<String?>(null) }
     val plan = selected ?: return
     val planned = plannedLeg(plan) ?: return
@@ -111,6 +112,12 @@ fun DrivingScreen(viewModel: GoboltViewModel, onFinish: () -> Unit, modifier: Mo
                             style = MaterialTheme.typography.titleLarge,
                         )
                     }
+                }
+            }
+            approaching?.let { name ->
+                GoCard(Modifier.fillMaxWidth()) {
+                    Text("곧 $name", style = MaterialTheme.typography.headlineMedium)
+                    Text("충전기 상태를 확인하세요", style = MaterialTheme.typography.bodyLarge, color = secondaryText())
                 }
             }
             navi.naviPlan?.let { naviPlan ->

@@ -163,6 +163,7 @@ fun PlanScreen(
                 StopSheet(
                     stop = stop,
                     alternatives = viewModel.alternatives(plan, stop),
+                    powerKnown = viewModel.powerKnown(stop.chargerId),
                     onExclude = {
                         stop.chargerId?.let(viewModel::toggleCharger)
                         openStop = null
@@ -289,6 +290,7 @@ private fun StopCard(stop: ChargeStop, dayOffset: Int, modifier: Modifier = Modi
 private fun StopSheet(
     stop: ChargeStop,
     alternatives: List<ChargerOption>,
+    powerKnown: Boolean,
     onExclude: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -315,7 +317,7 @@ private fun StopSheet(
                 Row(horizontalArrangement = Arrangement.spacedBy(48.dp)) {
                     Metric("${pct(stop.fromPct)} → ${pct(stop.toPct)}", "충전 잔량")
                     Metric(chargeTime(stop.minutes), "걸리는 시간")
-                    Metric("${stop.powerKw.rounded()}kW", if (stop.fast) "평균 급속" else "완속")
+                    Metric("${stop.powerKw.rounded()}kW", if (!powerKnown) "출력 미확인 · 가정값" else if (stop.fast) "평균 급속" else "완속")
                 }
                 if (alternatives.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
