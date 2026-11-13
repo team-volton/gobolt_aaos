@@ -61,8 +61,9 @@ class NaviGateway(context: Context) {
         }
 
         override fun onDrivingInfo(drivingInfo: DrivingInfo) {
-            val destination = drivingInfo.destination.toLeg()
-            val next = drivingInfo.waypoints.firstOrNull()?.toLeg() ?: destination
+            // 경로 계산 중에는 0이 올 수 있음 / Zeros can arrive while the route is still being calculated
+            val destination = drivingInfo.destination.toLeg().takeIf { it.remainKm > 0 } ?: return
+            val next = drivingInfo.waypoints.firstOrNull()?.toLeg()?.takeIf { it.remainKm > 0 } ?: destination
             _state.update { it.copy(routeActive = true, destination = destination, nextStop = next) }
         }
 
@@ -106,6 +107,11 @@ class NaviGateway(context: Context) {
         navi.release()
     }
 
+    fun cancelRoute() = guarded {
+        navi.cancelRoute()
+        _state.update { it.copy(routeActive = false, destination = null, nextStop = null) }
+    }
+
     fun requestTrip(destination: NaviPlace) = guarded {
         log("요청: ${destination.name}까지 예상값")
         navi.requestTrip(
@@ -117,6 +123,7 @@ class NaviGateway(context: Context) {
         // SDK의 경유지 번호는 FIRST, SECOND뿐 / The SDK only indexes FIRST and SECOND
         require(waypoints.size <= WAYPOINT_SLOTS.size) { "경유지는 ${WAYPOINT_SLOTS.size}개까지입니다." }
         log("요청: ${destination.name} 경로, 경유지 " + waypoints.joinToString { it.name })
+        _state.update { it.copy(destination = null, nextStop = null) }
         navi.requestRouteWithWaypoints(
             RouteWithWaypointsRequest(
                 destination = RouteInfo(
