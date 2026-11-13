@@ -41,7 +41,17 @@ object DemoTrip {
 
     fun placeOf(chargerId: String?): NaviPlace? = chargerPlaces[chargerId]
 
-    fun schedule(startSocPct: Double, input: TripInput = TripInput()): Schedule {
+    val outboundChargers = listOf(
+        Charger("kimcheon-s", "김천휴게소", 207.0, 100.0),
+        Charger("chilgok-s", "칠곡휴게소", 240.0, 350.0),
+        Charger("pyeongsa-s", "평사휴게소", 294.0, 100.0),
+    )
+
+    fun schedule(
+        startSocPct: Double,
+        input: TripInput = TripInput(),
+        outbound: List<Charger> = outboundChargers,
+    ): Schedule {
         val slow = ChargingSite(slow = ChargingPlace("숙소 완속", 7.0, targetPct = 90.0))
         fun night(index: Int) = when (input.nights[index]) {
             Stay.LODGING -> Night.Lodging(slow)
@@ -56,11 +66,7 @@ object DemoTrip {
                         Activity.Drive(
                             "서울 → 부산",
                             LEG_KM.toDouble(),
-                            chargers = listOf(
-                                Charger("kimcheon-s", "김천휴게소", 207.0, 100.0),
-                                Charger("chilgok-s", "칠곡휴게소", 240.0, 350.0),
-                                Charger("pyeongsa-s", "평사휴게소", 294.0, 100.0),
-                            ),
+                            chargers = outbound,
                         ),
                     ),
                     night(0),

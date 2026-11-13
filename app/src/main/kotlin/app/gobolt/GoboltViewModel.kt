@@ -24,7 +24,9 @@ import app.gobolt.engine.Strategy
 import app.gobolt.engine.Vehicle
 import app.gobolt.engine.checkWhileDriving
 import app.gobolt.navi.NaviGateway
+import app.gobolt.engine.Charger
 import app.gobolt.navi.LiveLeg
+import app.gobolt.navi.NaviPlace
 import app.gobolt.vehicle.VehicleGateway
 import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
@@ -81,14 +83,14 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         Planner(vehicle, settings.toConfig())
     }
 
-    val plans: StateFlow<List<Plan>> = combine(planner, startSoc, _tripInput, _excludedChargers) { planner, soc, input, excluded ->
-        planner.planAll(DemoTrip.schedule(soc, input), excluded)
+    val plans: StateFlow<List<Plan>> = combine(planner, startSoc, _tripInput, _excludedChargers, navi.state) { planner, soc, input, excluded, _ ->
+        planner.planAll(scheduleFor(soc, input), excluded)
     }.stateInUi(emptyList())
 
     // 차박 전후 비교 기준 / Baseline for the before and after comparison
-    val lodgingPlans: StateFlow<List<Plan>> = combine(planner, startSoc, _tripInput, _excludedChargers) { planner, soc, input, excluded ->
+    val lodgingPlans: StateFlow<List<Plan>> = combine(planner, startSoc, _tripInput, _excludedChargers, navi.state) { planner, soc, input, excluded, _ ->
         val lodging = input.copy(nights = input.nights.map { Stay.LODGING })
-        planner.planAll(DemoTrip.schedule(soc, lodging), excluded)
+        planner.planAll(scheduleFor(soc, lodging), excluded)
     }.stateInUi(emptyList())
 
     private val extraTodayKm = MutableStateFlow(0)
@@ -155,13 +157,38 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         val excluded = _excludedChargers.value + id
         val soc = session?.startSoc ?: (car.state.value.socPct ?: DEFAULT_SOC_PCT).toDouble()
         val next = Planner(vehicleWith(efficiencyFactor.value), _settings.value.toConfig())
-            .plan(DemoTrip.schedule(soc, _tripInput.value), current.strategy, excluded)
+            .plan(scheduleFor(soc, _tripInput.value), current.strategy, excluded)
         if (!next.isFeasible) return null
         _excludedChargers.value = excluded
         val stops = next.stops.filter { it.dayIndex == 0 && it.fast }
-        navi.sendRoute(DemoTrip.busan, stops.mapNotNull { DemoTrip.placeOf(it.chargerId) })
+        navi.sendRoute(DemoTrip.busan, stops.mapNotNull { placeOf(it.chargerId) })
         return stops.firstOrNull()?.name
     }
+
+    // 내비가 준 충전소가 있으면 그것으로 계획 / Plans with the navi's chargers when it has any
+    val usesNaviChargers: Boolean get() = navi.state.value.tripChargers.isNotEmpty()
+
+    private fun naviChargers(): List<Charger> = navi.state.value.tripChargers.map { found ->
+        val known = DemoTrip.outboundChargers.firstOrNull { it.name == found.name }
+        Charger(
+            id = NAVI_PREFIX + found.name,
+            name = found.name,
+            positionKm = found.positionKm,
+            // 출력을 모르면 보수적으로 가정 / Assumes a conservative power when unknown
+            powerKw = known?.powerKw ?: UNKNOWN_CHARGER_KW,
+        )
+    }
+
+    private fun scheduleFor(soc: Double, input: TripInput) =
+        naviChargers().takeIf { it.isNotEmpty() }
+            ?.let { DemoTrip.schedule(soc, input, it) }
+            ?: DemoTrip.schedule(soc, input)
+
+    private fun placeOf(chargerId: String?): NaviPlace? =
+        DemoTrip.placeOf(chargerId)
+            ?: navi.state.value.tripChargers.firstOrNull { NAVI_PREFIX + it.name == chargerId }?.place
+
+    fun refreshNaviChargers() = navi.requestTrip(DemoTrip.busan)
 
     fun selectStrategy(strategy: Strategy) {
         _strategy.value = strategy
@@ -191,7 +218,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         if (stop.chargerId == null) return emptyList()
         val start = plan.events.firstOrNull { it.dayIndex == stop.dayIndex && it.kind == EventKind.DRIVE }
             ?: return emptyList()
-        val schedule = DemoTrip.schedule(start.fromPct, _tripInput.value)
+        val schedule = scheduleFor(start.fromPct, _tripInput.value)
         val drive = schedule.days[stop.dayIndex].activities.filterIsInstance<Activity.Drive>().firstOrNull()
             ?: return emptyList()
         return Planner(vehicleWith(efficiencyFactor.value), _settings.value.toConfig())
@@ -202,7 +229,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     fun startGuidance(plan: Plan) {
         val waypoints = plan.stops
             .filter { it.dayIndex == 0 && it.fast }
-            .mapNotNull { DemoTrip.placeOf(it.chargerId) }
+            .mapNotNull { placeOf(it.chargerId) }
         val firstDay = plan.events.filter { it.dayIndex == 0 && it.kind == EventKind.DRIVE }
         val state = car.state.value
         val soc = (state.socPct ?: DEFAULT_SOC_PCT).toDouble()
@@ -289,6 +316,8 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     private companion object {
         const val DEFAULT_SOC_PCT = 80
         const val WH_THRESHOLD = 1000.0
+        const val NAVI_PREFIX = "navi-"
+        const val UNKNOWN_CHARGER_KW = 100.0
         val CHARGE_KINDS = setOf(EventKind.FAST_CHARGE, EventKind.SLOW_CHARGE)
     }
 }

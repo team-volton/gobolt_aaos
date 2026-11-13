@@ -30,6 +30,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +48,7 @@ import app.gobolt.engine.ChargeStop
 import app.gobolt.engine.ChargerOption
 import app.gobolt.engine.Plan
 import app.gobolt.engine.Strategy
+import app.gobolt.engine.Suggestion
 import app.gobolt.ui.CardGap
 import app.gobolt.ui.GoCard
 import app.gobolt.ui.GoboltTheme
@@ -82,10 +84,15 @@ fun PlanScreen(
     val plan = plans.firstOrNull { it.strategy == strategy } ?: return
     val before = baseline.firstOrNull { it.strategy == strategy }
     var openStop by remember { mutableStateOf<ChargeStop?>(null) }
+    LaunchedEffect(Unit) { viewModel.refreshNaviChargers() }
 
     val options: @Composable (Modifier) -> Unit = { panel ->
         Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = panel) {
-            ScreenHeader("서울 → 부산", onBack, "11/1 08:40 출발 · 3박 4일")
+            ScreenHeader(
+                "서울 → 부산",
+                onBack,
+                "11/1 08:40 출발 · 충전소 " + if (viewModel.usesNaviChargers) "내비 추천" else "기본 목록",
+            )
             plans.forEach { candidate ->
                 StrategyCard(candidate, candidate.strategy == strategy) {
                     viewModel.selectStrategy(candidate.strategy)
@@ -191,8 +198,10 @@ private fun StrategyCard(plan: Plan, selected: Boolean, onClick: () -> Unit) {
                 color = secondaryText(),
             )
         } else {
+            val raise = plan.infeasibility?.suggestions
+                ?.filterIsInstance<Suggestion.RaiseDepartureSoc>()?.firstOrNull()
             Text(
-                "현재 조건으로는 어려운 일정",
+                raise?.let { "출발 전 ${pct(it.pct)}까지 충전하면 가능해요" } ?: "현재 조건으로는 어려운 일정",
                 style = MaterialTheme.typography.bodyMedium,
                 color = GoboltTheme.energy.warning,
             )

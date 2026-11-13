@@ -113,8 +113,17 @@ fun DrivingScreen(viewModel: GoboltViewModel, onFinish: () -> Unit, modifier: Mo
                     }
                 }
             }
+            navi.naviPlan?.let { naviPlan ->
+                GoCard(Modifier.fillMaxWidth()) {
+                    Text("내비 충전 계획", style = MaterialTheme.typography.titleLarge, color = secondaryText())
+                    Text(
+                        "${naviPlan.startSoc}% → ${naviPlan.endSoc}% · ${naviPlan.minutes}분",
+                        style = MaterialTheme.typography.headlineMedium,
+                    )
+                }
+            }
             GoCard(Modifier.fillMaxWidth().weight(1f)) {
-                Text("충전 계획", style = MaterialTheme.typography.headlineMedium)
+                Text("고볼트 충전 계획", style = MaterialTheme.typography.headlineMedium)
                 plan.stops.forEach { stop ->
                     Column(Modifier.padding(vertical = 8.dp)) {
                         Text(stop.name, style = MaterialTheme.typography.titleLarge)
