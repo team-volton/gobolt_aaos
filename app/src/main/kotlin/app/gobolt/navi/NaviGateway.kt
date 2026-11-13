@@ -4,6 +4,7 @@ import ai.pleos.playground.navi.constants.NaviErrorCode
 import ai.pleos.playground.navi.constants.RoutePointPoiType
 import ai.pleos.playground.navi.constants.WaypointIndex
 import ai.pleos.playground.navi.data.BookmarkInfo
+import ai.pleos.playground.navi.data.CurrentLocationInfo
 import ai.pleos.playground.navi.data.DestinationArrivedInfo
 import ai.pleos.playground.navi.data.DrivingInfo
 import ai.pleos.playground.navi.data.DrivingState
@@ -51,6 +52,9 @@ data class NaviState(
     val places: List<NaviPlace> = emptyList(),
     // 내비가 경로 위에 표시한 충전소 / Chargers the navi marks on the route
     val tripChargers: List<NaviCharger> = emptyList(),
+    val tripFor: String? = null,
+    val tripKm: Double? = null,
+    val currentLocation: NaviPlace? = null,
     val naviPlan: NaviPlan? = null,
     val log: List<String> = emptyList(),
 )
@@ -72,7 +76,7 @@ class NaviGateway(context: Context) {
                     val ratio = point.ratioOnRoute.let { if (it > 1) it / 100 else it }
                     NaviCharger(point.poiName, NaviPlace(point.poiName, point.latitude, point.longitude), km * ratio)
                 }
-            _state.update { it.copy(tripChargers = chargers) }
+            _state.update { it.copy(tripChargers = chargers, tripKm = km) }
             chargers.forEach { log("내비 충전소: ${it.name} ${it.positionKm.toInt()}km 지점") }
         }
 
@@ -111,6 +115,11 @@ class NaviGateway(context: Context) {
         override fun onRecentDestinationInfo(recentDestinationInfoList: List<RecentDestinationInfo>) =
             addPlaces(recentDestinationInfoList.map { NaviPlace(it.name, it.latitude, it.longitude) })
 
+        override fun onCurrentLocationInfo(currentLocationInfo: CurrentLocationInfo) {
+            val here = NaviPlace("현재 위치", currentLocationInfo.latitude, currentLocationInfo.longitude)
+            _state.update { it.copy(currentLocation = here) }
+        }
+
         override fun onError(errorCode: NaviErrorCode) = log("오류: $errorCode")
     }
 
@@ -122,6 +131,7 @@ class NaviGateway(context: Context) {
                 log("내비 연결됨")
                 navi.getBookmarkInfo()
                 navi.getRecentDestinationInfo()
+                navi.getCurrentLocationInfo()
             },
             onFailed = { log("내비 연결 실패: ${it.message}") },
         )
@@ -139,6 +149,7 @@ class NaviGateway(context: Context) {
 
     fun requestTrip(destination: NaviPlace) = guarded {
         log("요청: ${destination.name}까지 예상값")
+        _state.update { it.copy(tripFor = destination.name, tripKm = null, tripChargers = emptyList()) }
         navi.requestTrip(
             TripRequest(destination.latitude, destination.longitude, "", destination.name, null),
         )
@@ -183,7 +194,9 @@ class NaviGateway(context: Context) {
     )
 
     private fun addPlaces(found: List<NaviPlace>) {
-        _state.update { state -> state.copy(places = (state.places + found).distinctBy { it.name }) }
+        // 이름이나 좌표가 빈 항목은 제외 / Skips entries without a name or coordinates
+        val valid = found.filter { it.name.isNotBlank() && (it.latitude != 0.0 || it.longitude != 0.0) }
+        _state.update { state -> state.copy(places = (state.places + valid).distinctBy { it.name }) }
     }
 
     private fun guarded(call: () -> Unit) {

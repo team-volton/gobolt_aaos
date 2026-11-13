@@ -20,6 +20,7 @@ data class VehicleState(
     val odometerKm: Float? = null,
     val error: String? = null,
     val capacityKwh: Float? = null,
+    val efficiencyKmPerKwh: Float? = null,
     val driving: Boolean = false,
 )
 
@@ -69,6 +70,7 @@ class VehicleGateway(context: Context) {
                 }
             readOdometer().onSuccess { value -> _state.update { it.copy(odometerKm = value) } }
             readCapacity().onSuccess { value -> _state.update { it.copy(capacityKwh = value) } }
+            readEfficiency().onSuccess { value -> _state.update { it.copy(efficiencyKmPerKwh = value) } }
             readGear().onSuccess { value ->
                 value?.let(::applyGear)
                 gear.registerGearSelection(gearListener)
@@ -95,6 +97,10 @@ class VehicleGateway(context: Context) {
 
     private suspend fun readCapacity(): Result<Float?> = awaitResult { done, failed ->
         battery.getEvBatteryCapacity(done, failed)
+    }
+
+    private suspend fun readEfficiency(): Result<Float?> = awaitResult { done, failed ->
+        battery.getCumulativeEvEfficiency(done, failed)
     }
 
     private suspend fun readGear(): Result<VehicleGear?> = awaitResult { done, failed ->
