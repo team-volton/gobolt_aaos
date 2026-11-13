@@ -32,7 +32,7 @@ private const val OTHER_EVENT_WIDTH = 50.0
 private const val MIN_SPAN = 0.01
 
 @Composable
-fun SocChart(plan: Plan, floorPct: Double, modifier: Modifier = Modifier) {
+fun SocChart(plan: Plan, floorPct: Double, dayOffset: Int, modifier: Modifier = Modifier) {
     val energy = GoboltTheme.energy
     val muted = secondaryText()
     val grid = energy.track
@@ -69,7 +69,7 @@ fun SocChart(plan: Plan, floorPct: Double, modifier: Modifier = Modifier) {
             if (event.dayIndex != day) {
                 day = event.dayIndex
                 drawLine(grid, Offset(x, 0f), Offset(x, bottom), strokeWidth = 2f)
-                drawLabel(measurer, "${day + 1}일차", Offset(x + 10f, 0f), label)
+                drawLabel(measurer, "${day + 1 + dayOffset}일차", Offset(x + 10f, 0f), label)
             }
             val next = x + widthOf(event.km, event.kind).toFloat() * scale
             val color = when (event.kind) {

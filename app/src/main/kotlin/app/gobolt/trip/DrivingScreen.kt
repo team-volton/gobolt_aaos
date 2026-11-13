@@ -128,7 +128,7 @@ fun DrivingScreen(viewModel: GoboltViewModel, onFinish: () -> Unit, modifier: Mo
                     Column(Modifier.padding(vertical = 8.dp)) {
                         Text(stop.name, style = MaterialTheme.typography.titleLarge)
                         Text(
-                            "${stop.dayIndex + 1}일차 · ${pct(stop.fromPct)} → ${pct(stop.toPct)}",
+                            "${stop.dayIndex + 1 + viewModel.dayOffset()}일차 · ${pct(stop.fromPct)} → ${pct(stop.toPct)}",
                             style = MaterialTheme.typography.bodyLarge,
                             color = secondaryText(),
                         )

@@ -143,11 +143,11 @@ fun PlanScreen(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                     plan.stops.take(MAX_STOP_CARDS).forEach { stop ->
-                        StopCard(stop, Modifier.weight(1f)) { openStop = stop }
+                        StopCard(stop, viewModel.dayOffset(trip), Modifier.weight(1f)) { openStop = stop }
                     }
                 }
                 GoCard(Modifier.fillMaxWidth().weight(1f)) {
-                    SocChart(plan, settings.floorPct.toDouble(), Modifier.fillMaxSize())
+                    SocChart(plan, settings.floorPct.toDouble(), viewModel.dayOffset(trip), Modifier.fillMaxSize())
                 }
             }
             openStop?.let { stop ->
@@ -239,12 +239,12 @@ private fun CarCampCard(night: Int, on: Boolean, onChange: (Boolean) -> Unit, be
 }
 
 @Composable
-private fun StopCard(stop: ChargeStop, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun StopCard(stop: ChargeStop, dayOffset: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
     GoCard(modifier = modifier, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.Bolt, null, Modifier.size(32.dp), tint = GoboltTheme.energy.charge)
             Text(
-                "${stop.dayIndex + 1}일차",
+                "${stop.dayIndex + 1 + dayOffset}일차",
                 style = MaterialTheme.typography.bodyMedium,
                 color = secondaryText(),
             )

@@ -71,12 +71,15 @@ fun HomeScreen(
     val plans by viewModel.plans.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val trip by viewModel.trip.collectAsStateWithLifecycle()
+    val navi by viewModel.naviState.collectAsStateWithLifecycle()
     val floor = settings.floorPct.toDouble()
     var fieldTrip by remember { mutableStateOf(false) }
 
     if (fieldTrip) {
         FieldTripDialog(
             preview = viewModel::previewFieldTrip,
+            places = navi.places,
+            kmFor = viewModel::fieldTripKm,
             onApply = {
                 viewModel.applyFieldTrip(it)
                 fieldTrip = false

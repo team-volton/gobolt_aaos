@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.gobolt.FieldTripPreview
+import app.gobolt.navi.NaviPlace
 import app.gobolt.ui.GoboltTheme
 import app.gobolt.ui.Metric
 import app.gobolt.ui.PrimaryButton
@@ -24,10 +25,13 @@ import app.gobolt.ui.pct
 import app.gobolt.ui.secondaryText
 
 private val DISTANCES = listOf(30, 60, 90, 120)
+private const val MAX_PLACES = 3
 
 @Composable
 fun FieldTripDialog(
     preview: (Int) -> FieldTripPreview?,
+    places: List<NaviPlace>,
+    kmFor: (NaviPlace) -> Int,
     onApply: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -42,6 +46,16 @@ fun FieldTripDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.fillMaxWidth()) {
                 if (result == null) {
+                    if (places.isNotEmpty()) {
+                        Text("장소를 고르거나", style = MaterialTheme.typography.titleLarge, color = secondaryText())
+                        places.take(MAX_PLACES).forEach { place ->
+                            SecondaryButton(
+                                "${place.name} · 왕복 약 ${kmFor(place)}km",
+                                { km = kmFor(place) },
+                                Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
                     Text("왕복 거리를 골라 주세요", style = MaterialTheme.typography.titleLarge, color = secondaryText())
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         DISTANCES.forEach { value ->

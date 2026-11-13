@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.gobolt.data.AppSettings
 import app.gobolt.data.AppStore
+import app.gobolt.data.ORIGIN_NAME
 import app.gobolt.data.DriveRecord
 import app.gobolt.demo.DemoTrip
 import app.gobolt.data.Stay
@@ -32,6 +33,7 @@ import app.gobolt.navi.LiveLeg
 import app.gobolt.navi.NaviPlace
 import app.gobolt.vehicle.VehicleGateway
 import java.time.LocalDate
+import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -154,6 +156,11 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         return FieldTripPreview(home(before), home(after), after.isFeasible && home(after) >= settings.floorPct)
     }
 
+    fun fieldTripKm(place: NaviPlace): Int {
+        val here = navi.state.value.currentLocation ?: return 0
+        return (TripSchedule.estimateKm(here, place) * 2).roundToInt()
+    }
+
     fun applyFieldTrip(km: Int) {
         extraTodayKm.update { it + km }
         store.saveExtraKm(today.toEpochDay(), extraTodayKm.value)
@@ -170,7 +177,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         if (!next.isFeasible) return null
         _excludedChargers.value = excluded
         val stops = next.stops.filter { it.dayIndex == 0 && it.fast }
-        navi.sendRoute(_trip.value.destination, stops.mapNotNull { placeOf(it.chargerId) })
+        navi.sendRoute(legDestination(_trip.value), stops.mapNotNull { placeOf(it.chargerId) })
         return stops.firstOrNull()?.name
     }
 
@@ -191,35 +198,50 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     fun legs(trip: Trip = _trip.value): TripLegs {
         val state = navi.state.value
         val measuredKm = state.tripKm?.takeIf { state.tripFor == trip.destination.name }
-        val origin = state.currentLocation ?: DemoTrip.seoul
+        // 목적지에 도착한 뒤에는 복귀 구간을 내비로 잴 수 있음 / Once at the destination, the navi can measure the way back
+        val backKm = state.tripKm?.takeIf { state.tripFor == ORIGIN_NAME }
+        val origin = originOf(trip)
         val outKm = measuredKm ?: TripSchedule.estimateKm(origin, trip.destination)
-        val fromNavi = if (measuredKm != null) naviChargers() else emptyList()
+        val fromNavi = if (measuredKm != null || backKm != null) naviChargers() else emptyList()
         val demoRoute = trip.destination.name == DemoTrip.busan.name
-        val out = fromNavi.ifEmpty {
+        val out = (if (measuredKm != null) fromNavi else emptyList()).ifEmpty {
             if (demoRoute) DemoTrip.outboundChargers.filter { it.positionKm < outKm } else emptyList()
         }
-        val back = if (fromNavi.isEmpty() && demoRoute) {
-            DemoTrip.returnChargers
-        } else {
-            fromNavi
+        val back = when {
+            backKm != null -> fromNavi
+            demoRoute && fromNavi.isEmpty() -> DemoTrip.returnChargers
+            else -> fromNavi
                 .map { it.copy(id = it.id + BACK_SUFFIX, name = it.name + " (복귀 추정)", positionKm = outKm - it.positionKm) }
                 .sortedBy { it.positionKm }
         }
-        return TripLegs(outKm, outKm, out, back, measuredKm != null)
+        return TripLegs(outKm, backKm ?: outKm, out, back, measuredKm != null, backKm != null)
+    }
+
+    private fun originOf(trip: Trip): NaviPlace =
+        trip.origin ?: navi.state.value.currentLocation ?: DemoTrip.seoul
+
+    // 오늘이 여행 중 며칠째인지 / Which day of the trip today is
+    fun dayOffset(trip: Trip = _trip.value): Int =
+        (today.toEpochDay() - trip.startEpochDay).coerceIn(0, trip.nights.size.toLong()).toInt()
+
+    private fun onReturnLeg(trip: Trip): Boolean {
+        if (dayOffset(trip) == trip.nights.size) return true
+        val here = navi.state.value.currentLocation ?: return false
+        return TripSchedule.estimateKm(here, trip.destination) < NEAR_DESTINATION_KM
     }
 
     val chargerSource: String
         get() {
             val state = navi.state.value
             return when {
-                state.tripFor == _trip.value.destination.name && state.tripChargers.isNotEmpty() -> "내비 추천"
+                state.tripFor in setOf(_trip.value.destination.name, ORIGIN_NAME) && state.tripChargers.isNotEmpty() -> "내비 추천"
                 _trip.value.destination.name == DemoTrip.busan.name -> "기본 목록"
                 else -> "정보 없음"
             }
         }
 
     private fun scheduleFor(soc: Double, trip: Trip) =
-        TripSchedule.build(trip, soc, legs(trip), _settings.value)
+        TripSchedule.build(trip, soc, legs(trip), _settings.value, dayOffset(trip))
 
     private fun placeOf(chargerId: String?): NaviPlace? {
         val id = chargerId?.removeSuffix(BACK_SUFFIX)
@@ -235,10 +257,22 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         return (listOf(origin) + stops + trip.destination) to stops
     }
 
-    fun refreshNaviChargers() = navi.requestTrip(_trip.value.destination)
+    // 출발 직전에 내비 값으로 다시 계산 / Recalculates from navi values right before each leg
+    fun refreshNaviChargers() {
+        val trip = _trip.value
+        if (onReturnLeg(trip)) {
+            val origin = originOf(trip)
+            navi.requestTrip(NaviPlace(ORIGIN_NAME, origin.latitude, origin.longitude))
+        } else {
+            navi.requestTrip(trip.destination)
+        }
+    }
+
+    private fun legDestination(trip: Trip): NaviPlace =
+        if (onReturnLeg(trip)) originOf(trip).let { NaviPlace(ORIGIN_NAME, it.latitude, it.longitude) } else trip.destination
 
     fun setDestination(place: NaviPlace) {
-        updateTrip { it.copy(destination = place) }
+        updateTrip { it.copy(destination = place, origin = navi.state.value.currentLocation ?: it.origin) }
         _excludedChargers.value = emptySet()
         navi.requestTrip(place)
     }
@@ -307,7 +341,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         val state = car.state.value
         val soc = (state.socPct ?: DEFAULT_SOC_PCT).toDouble()
         session = DriveSession(
-            name = _trip.value.destination.name,
+            name = legDestination(_trip.value).name,
             startSoc = soc,
             startOdometerKm = state.odometerKm,
             startedAt = System.currentTimeMillis(),
@@ -315,7 +349,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
             plannedEndSoc = firstDay.lastOrNull()?.toPct ?: soc,
             lastSoc = soc,
         )
-        navi.sendRoute(_trip.value.destination, waypoints)
+        navi.sendRoute(legDestination(_trip.value), waypoints)
     }
 
     // 차량 용량 기준 % 환산 / Converts to percent of the car's reported capacity
@@ -404,6 +438,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         const val NAVI_PREFIX = "navi-"
         const val UNKNOWN_CHARGER_KW = 100.0
         const val BACK_SUFFIX = "-back"
+        const val NEAR_DESTINATION_KM = 30.0
         const val MINUTES_PER_DAY = 24 * 60
         const val MIN_CAPACITY_KWH = 10.0
         const val MAX_CAPACITY_KWH = 200.0
