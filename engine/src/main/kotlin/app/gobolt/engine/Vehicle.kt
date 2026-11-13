@@ -47,6 +47,16 @@ fun interface HvacPowerModel {
 
     companion object {
         fun fixed(kw: Double) = HvacPowerModel { _, _ -> kw }
+
+        // 온도 차이에 비례, 기온을 모르면 기준 전력 / Scales with the temperature gap, else the reference power
+        fun byTemperatureGap(baseKw: Double, kwPerDegree: Double, referenceKw: Double) =
+            HvacPowerModel { outsideC, cabinC ->
+                if (outsideC == null || cabinC == null) {
+                    referenceKw
+                } else {
+                    baseKw + kwPerDegree * kotlin.math.abs(cabinC - outsideC)
+                }
+            }
     }
 }
 

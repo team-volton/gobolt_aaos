@@ -248,6 +248,14 @@ class PlannerRulesTest {
     }
 
     @Test
+    fun `기온 차이 모델은 기획서 예시값을 지난다`() {
+        val model = HvacPowerModel.byTemperatureGap(0.3, 0.063, 1.25)
+        assertEquals(1.245, model.kw(5.0, 20.0), 1e-9)
+        assertEquals(1.25, model.kw(null, null), 1e-9)
+        assertTrue(model.kw(-10.0, 20.0) > model.kw(5.0, 20.0))
+    }
+
+    @Test
     fun `잘못된 입력은 거부한다`() {
         assertFailsWith<IllegalArgumentException> { Schedule(120.0, emptyList()) }
         assertFailsWith<IllegalArgumentException> { Activity.Local("현지") }
