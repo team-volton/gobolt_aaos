@@ -1,9 +1,14 @@
 package app.gobolt.vehicle
 
 import ai.pleos.playground.vehicle.Vehicle
+import ai.pleos.playground.vehicle.api.model.area.SeatArea
+import ai.pleos.playground.vehicle.api.model.capability.AreaBounds
+import ai.pleos.playground.vehicle.constant.area.SeatValue
 import ai.pleos.playground.vehicle.constant.control.VehicleGear
+import ai.pleos.playground.vehicle.constant.unit.TemperatureUnit
 import ai.pleos.playground.vehicle.listener.EvBatteryStateOfChargeListener
 import ai.pleos.playground.vehicle.listener.GearSelectionListener
+import ai.pleos.playground.vehicle.listener.HvacTemperatureListener
 import android.content.Context
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +27,8 @@ data class VehicleState(
     val capacityKwh: Float? = null,
     val efficiencyKmPerKwh: Float? = null,
     val driving: Boolean = false,
+    // 운전석 공조 설정 온도 / Driver-side HVAC set temperature
+    val cabinC: Float? = null,
 )
 
 class VehicleGateway(context: Context) {
@@ -29,16 +36,27 @@ class VehicleGateway(context: Context) {
     private val battery = vehicle.getEvBattery()
     private val odometer = vehicle.getOdometer()
     private val gear = vehicle.getGear()
+    private val hvac = vehicle.getHVAC()
+    private var cabinArea = SeatArea(SeatValue.ROW_1_LEFT)
 
     private val _state = MutableStateFlow(VehicleState())
     val state: StateFlow<VehicleState> = _state.asStateFlow()
 
     private var registered = false
     private var gearRegistered = false
+    private var hvacRegistered = false
 
     private val gearListener = object : GearSelectionListener {
         override fun onSelected(value: VehicleGear?) {
             value?.let(::applyGear)
+        }
+
+        override fun onFailed(e: Exception) = Unit
+    }
+
+    private val hvacListener = object : HvacTemperatureListener {
+        override fun onHvacTemperatureUpdated(value: Float?) {
+            value?.let { c -> _state.update { it.copy(cabinC = c) } }
         }
 
         override fun onFailed(e: Exception) = Unit
@@ -76,6 +94,11 @@ class VehicleGateway(context: Context) {
                 gear.registerGearSelection(gearListener)
                 gearRegistered = true
             }
+            // 지원 좌석을 먼저 확인, 공조가 꺼져 있어도 변경은 계속 받음
+            // Picks a supported seat first, and keeps listening even if the HVAC is off now
+            readCabinAreas().getOrNull()?.keys?.firstOrNull()?.let { cabinArea = it }
+            readCabin().onSuccess { value -> value?.let { c -> _state.update { it.copy(cabinC = c) } } }
+            runCatching { hvac.registerHvacTemperature(cabinArea, hvacListener) }.onSuccess { hvacRegistered = true }
         }
     }
 
@@ -84,6 +107,8 @@ class VehicleGateway(context: Context) {
         registered = false
         if (gearRegistered) gear.unregisterGearSelection(gearListener)
         gearRegistered = false
+        if (hvacRegistered) hvac.unregisterHvacTemperature(cabinArea, hvacListener)
+        hvacRegistered = false
         vehicle.release()
     }
 
@@ -105,6 +130,14 @@ class VehicleGateway(context: Context) {
 
     private suspend fun readGear(): Result<VehicleGear?> = awaitResult { done, failed ->
         gear.getCurrentGearSelectionState(done, failed)
+    }
+
+    private suspend fun readCabin(): Result<Float?> = awaitResult { done, failed ->
+        hvac.getHvacTemperature(cabinArea, TemperatureUnit.CELSIUS, done, failed)
+    }
+
+    private suspend fun readCabinAreas(): Result<Map<SeatArea, AreaBounds<Float>>> = awaitResult { done, failed ->
+        hvac.checkHvacTemperatureCapabilities(done, failed)
     }
 
     private suspend fun readOdometer(): Result<Float?> = awaitResult { done, failed ->
