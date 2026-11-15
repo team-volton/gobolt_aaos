@@ -431,7 +431,8 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
     fun vehicleSummary(): String {
         val state = car.state.value
         val vehicle = vehicleWith(efficiencyFactor.value)
-        val fromCar = state.efficiencyKmPerKwh?.toDouble()?.let(::validEfficiency) != null
+        val fromCar = _settings.value.efficiencyMode != EfficiencyMode.DEMO &&
+            state.efficiencyKmPerKwh?.toDouble()?.let(::validEfficiency) != null
         val carCabin = carCabin()
         return "용량 ${vehicle.capacityKwh.rounded1()}kWh · 전비 ${vehicle.kmPerKwh(RoadType.MIXED, null).rounded1()}km/kWh " +
             (if (fromCar) "(차량값)" else "(기본값)") +
@@ -584,7 +585,8 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         ux.stop()
     }
 
-    // 차량이 준 용량과 전비를 쓰고, 없으면 기본값 / Uses the car's capacity and efficiency, else defaults
+    // 차량이 준 용량과 전비를 쓰고, 없으면 기본값. 시연 모드는 아이오닉 9 고정값
+    // Uses the car's capacity and efficiency, else defaults. Demo mode stays on the Ioniq 9 values
     private fun vehicleWith(factor: Double, settings: AppSettings = _settings.value): Vehicle {
         val state = car.state.value
         val base = when (settings.efficiencyMode) {
@@ -592,10 +594,11 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
             EfficiencyMode.RATED -> Vehicle.ioniq9Rated().copy(hvac = TEMPERATURE_HVAC)
         }
         // SDK 값은 환경에 따라 Wh로 올 수 있음 / The SDK value may arrive in watt-hours
-        val capacity = state.capacityKwh?.toDouble()
+        val demo = settings.efficiencyMode == EfficiencyMode.DEMO
+        val capacity = state.capacityKwh?.toDouble()?.takeUnless { demo }
             ?.let { if (it > WH_THRESHOLD) it / 1000 else it }
             ?.takeIf { it in MIN_CAPACITY_KWH..MAX_CAPACITY_KWH }
-        val efficiency = state.efficiencyKmPerKwh?.toDouble()?.let(::validEfficiency)
+        val efficiency = state.efficiencyKmPerKwh?.toDouble()?.takeUnless { demo }?.let(::validEfficiency)
         return base.copy(
             capacityKwh = capacity ?: base.capacityKwh,
             efficiency = efficiency?.let { EfficiencyModel.flat(it) } ?: base.efficiency,
