@@ -90,7 +90,7 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         .map { (it.socPct ?: DEFAULT_SOC_PCT).toDouble() }
         .distinctUntilChanged()
 
-    private val carSpec = car.state.map { it.capacityKwh to it.efficiencyKmPerKwh }.distinctUntilChanged()
+    private val carSpec = car.state.map { Triple(it.capacityKwh, it.efficiencyKmPerKwh, it.cabinC) }.distinctUntilChanged()
 
     private val model: Flow<Vehicle> = combine(efficiencyFactor, carSpec, _settings, fastChargeKw) { factor, _, _, _ -> vehicleWith(factor) }
 
@@ -352,7 +352,12 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         }
 
     private fun scheduleFor(soc: Double, trip: Trip) =
-        TripSchedule.build(trip, soc, legs(trip), _settings.value, dayOffset(trip))
+        TripSchedule.build(trip.copy(cabinC = cabinOf(trip)), soc, legs(trip), _settings.value, dayOffset(trip))
+
+    // 차량 공조 설정값이 있으면 우선 / Prefers the car's HVAC set temperature
+    private fun carCabin(): Int? = car.state.value.cabinC?.roundToInt()?.takeIf { it in MIN_CABIN_C..MAX_CABIN_C }
+
+    private fun cabinOf(trip: Trip): Int = carCabin() ?: trip.cabinC
 
     private fun placeOf(chargerId: String?): NaviPlace? {
         val id = chargerId?.removeSuffix(BACK_SUFFIX)
@@ -427,8 +432,10 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         val state = car.state.value
         val vehicle = vehicleWith(efficiencyFactor.value)
         val fromCar = state.efficiencyKmPerKwh?.toDouble()?.let(::validEfficiency) != null
+        val carCabin = carCabin()
         return "용량 ${vehicle.capacityKwh.rounded1()}kWh · 전비 ${vehicle.kmPerKwh(RoadType.MIXED, null).rounded1()}km/kWh " +
-            if (fromCar) "(차량값)" else "(기본값)"
+            (if (fromCar) "(차량값)" else "(기본값)") +
+            " · 실내 ${carCabin ?: _trip.value.cabinC}°C " + if (carCabin != null) "(공조 설정)" else "(기본값)"
     }
 
     private fun Double.rounded1() = "%.1f".format(this)
@@ -622,6 +629,8 @@ class GoboltViewModel(application: Application) : AndroidViewModel(application) 
         // Assumption tuned to pass the plan's example (1.25kW at 5°C outside, 20°C cabin)
         val TEMPERATURE_HVAC = HvacPowerModel.byTemperatureGap(baseKw = 0.3, kwPerDegree = 0.063, referenceKw = 1.25)
         const val MINUTES_PER_DAY = 24 * 60
+        const val MIN_CABIN_C = 16
+        const val MAX_CABIN_C = 32
         const val MIN_CAPACITY_KWH = 10.0
         const val MAX_CAPACITY_KWH = 200.0
         const val MIN_KM_PER_KWH = 1.0
